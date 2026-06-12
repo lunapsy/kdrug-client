@@ -36,7 +36,7 @@ from .models import DrugInfo, DrugPermit, DrugProduct, DrugCost, PillIdentity
 from .parsers import parse_grn, parse_permit, parse_product, parse_cost
 from ._env import load_dotenv, create_env_file, find_dotenv
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 __all__ = [
     "KdrugClient",
