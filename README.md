@@ -1,38 +1,53 @@
 # kdrug-client
 
-공공데이터포털(data.go.kr)이 제공하는 **의약품 4종 OpenAPI**(식약처 3종 + 심평원
-약가)를 하나의 파이썬 클라이언트로 묶어주는 라이브러리입니다.
+[![PyPI](https://img.shields.io/pypi/v/kdrug-client.svg)](https://pypi.org/project/kdrug-client/)
+[![Python](https://img.shields.io/pypi/pyversions/kdrug-client.svg)](https://pypi.org/project/kdrug-client/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-| API | 서비스/오퍼레이션 (2026-06 현행) | 주는 정보 |
-|-----|----------|-----------|
-| 🟦 낱알식별 | `MdcinGrnIdntfcInfoService03/getMdcinGrnIdntfcInfoList03` | 알약 외형·치수·색상·식별표시·이미지 |
-| 🟩 e약은요 | `DrbEasyDrugInfoService/getDrbEasyDrugList` | 환자용 복약정보 — 효능·사용법·주의·상호작용·부작용·보관·낱알이미지 |
-| 🟧 제품허가 상세 | `DrugPrdtPrmsnInfoService07/getDrugPrdtPrmsnDtlInq06` | 주성분·원료·저장·유효기간·ATC·효능/용법/주의 문서·보험코드 |
-| 🟨 약가 (심평원) | `dgamtCrtrInfoService1.2/getDgamtList` | 건강보험 상한가·급여구분·전문/일반·투여경로·주성분코드 |
+공공데이터포털(data.go.kr)의 **의약품 4종 OpenAPI**(식약처 3종 + 심평원 약가)를
+파이썬에서 **한 줄로** 조회하게 해주는 라이브러리입니다.
 
-식약처 3종은 **`ITEM_SEQ`(품목기준코드)** 로 조인하고, 심평원 약가는 ITEM_SEQ가
-없으므로 **제품허가의 보험코드(`EDI_CODE` = 약가 `mds_cd`)로 정확 조인**합니다
-(보험코드가 없으면 품목명으로 검색). `get_drug_info` 한 번이면 네 API를 모두 호출해
-**정규화된 하나의 객체**로 합쳐줍니다.
+```python
+from kdrug import KdrugClient
 
-> ✅ 네 엔드포인트 모두 실제 공공데이터포털 키로 **라이브 호출 검증**을 마쳤습니다.
-> (예: 리피토정20mg → 상한가 688원이 보험코드 조인으로 채워짐. 비급여/OTC 품목은
-> 약가가 없습니다.)
->
-> ⚠️ **공공데이터포털 키는 네 API에 각각 "활용신청"이 필요합니다**(약가는 심평원
-> 서비스라 별도). 승인 안 된 API는 403 을 반환하고, `get_drug_info` 는 이를
-> `result.errors` 에 담은 뒤 승인된 API 결과만 병합합니다(부분 실패 허용). 약가
-> 조회를 끄려면 `get_drug_info(..., with_cost=False)`.
+client = KdrugClient.from_env()
+info = client.get_drug_info(item_name="타이레놀정500밀리그람").info
 
-- **외부 의존성 0** — 표준 라이브러리(`urllib`)만 사용합니다.
-- **부분 실패 허용** — 한 API가 죽어도 나머지 데이터는 그대로 받습니다.
-- **표기 흡수** — API마다 다른 `UPPER_SNAKE` / `camelCase` 키를 한 번에 정리합니다.
-- **타입 친화적** — `dataclass` 로 반환, IDE 자동완성이 됩니다.
-- **CLI 포함** — 터미널에서 `python -m kdrug --item-seq ...` 로 바로 조회.
+print(info.product.main_ingredient)   # 아세트아미노펜
+print(info.identity.drug_shape)       # 장방형 (모양)
+print(info.permit.efficacy)           # 이 약은 발열 및 통증에...
+print(info.cost.max_price)            # 상한가 (급여 의약품인 경우)
+```
 
-> ℹ️ 원래 [rxmcp](https://github.com/lunapsy/rxmcp) 프로젝트의 Django 모듈
-> `dispenser/kdrug` 에서 출발했으며, 누구나 쓸 수 있도록 프레임워크 의존성을
->걷어내고 독립 패키지로 재구성했습니다.
+원래는 흩어진 4개의 정부 API를 각각 호출하고, 서로 다른 응답 형식을 일일이
+맞춰야 했습니다. 이 라이브러리가 그걸 대신합니다.
+
+| 무엇을 | 어디서 (API) | 어떤 정보 |
+|--------|-------------|-----------|
+| 🟦 **모양·색** | 낱알식별 | 알약 외형·치수·색상·식별표시(각인)·이미지 |
+| 🟩 **복약정보** | e약은요 | 효능·사용법·주의·부작용·보관법 (환자용 쉬운 설명) |
+| 🟧 **허가정보** | 제품허가 상세 | 주성분·ATC·저장·유효기간·효능/용법/주의 문서·보험코드 |
+| 🟨 **약가** | 심평원 약가 | 건강보험 상한가·급여구분·전문/일반 |
+
+**특징**
+- 🪶 **의존성 0** — 표준 라이브러리(`urllib`)만 씁니다. `pip install` 하나면 끝.
+- 🔗 **자동 조인** — 품목기준코드 하나로 4개 API를 호출해 **하나의 객체**로 합쳐줍니다.
+- 🛟 **부분 실패 허용** — 한 API가 막혀도(403/오류) 나머지 데이터는 그대로 받습니다.
+- 🧩 **타입 친화적** — `dataclass` 반환이라 IDE 자동완성이 됩니다.
+- 💻 **CLI 포함** — 터미널에서 `kdrug --item-name 타이레놀` 한 줄로 조회.
+
+---
+
+## 목차
+1. [설치](#설치)
+2. [빠른 시작 (3단계)](#빠른-시작-3단계)
+3. [인증키 발급](#인증키-발급)
+4. [사용법](#사용법)
+5. [결과 다루기](#결과-다루기)
+6. [CLI](#cli)
+7. [API 레퍼런스](#api-레퍼런스)
+8. [예외 처리](#예외-처리)
+9. [자주 묻는 질문](#자주-묻는-질문)
 
 ---
 
@@ -42,112 +57,247 @@
 pip install kdrug-client
 ```
 
-아직 PyPI에 올리기 전이라면 소스에서:
-
-```bash
-git clone https://github.com/lunapsy/kdrug-client.git
-cd kdrug-client
-pip install -e .
-```
-
-Python 3.9 이상이면 동작합니다.
+Python 3.9 이상이면 됩니다. 설치되면 `kdrug` 명령어도 함께 깔립니다.
 
 ---
 
-## 인증키 발급 (5분)
+## 빠른 시작 (3단계)
 
-1. [공공데이터포털](https://www.data.go.kr) 로그인
-2. 아래 4개 API "활용신청" (보통 즉시~수시간 내 승인)
+### 1. 설치
+```bash
+pip install kdrug-client
+```
+
+### 2. 인증키 등록
+공공데이터포털에서 키를 발급받아([아래 안내](#인증키-발급)) 환경변수로 등록합니다.
+```bash
+export KDRUG_API_KEY="발급받은_Decoding_인증키"
+```
+
+### 3. 조회
+```python
+from kdrug import KdrugClient
+
+client = KdrugClient.from_env()
+
+# 제품명으로 검색
+result = client.get_drug_info(item_name="타이레놀정500밀리그람")
+
+if result.ok:
+    info = result.info
+    print("제품명:", info.item_name)
+    print("주성분:", info.product.main_ingredient if info.product else "-")
+    print("효능  :", info.permit.efficacy if info.permit else "-")
+else:
+    print("못 찾음:", result.errors)
+```
+
+끝입니다. 터미널에서 바로 확인하고 싶으면:
+```bash
+kdrug --item-name 타이레놀정500밀리그람
+```
+
+---
+
+## 인증키 발급
+
+> 키는 **무료**이고, 발급에 5~10분이면 됩니다. 한 계정의 키 하나로 4개 API를
+> 모두 쓸 수 있지만, **API마다 "활용신청"을 따로 해야** 합니다.
+
+1. [공공데이터포털](https://www.data.go.kr) 회원가입 / 로그인
+2. 아래 4개 API 페이지에서 각각 **활용신청** (보통 즉시~수시간 내 자동 승인)
    - [의약품 낱알식별 정보](https://www.data.go.kr/data/15057639/openapi.do)
    - [의약품개요정보(e약은요)](https://www.data.go.kr/data/15075057/openapi.do)
    - [의약품 제품 허가정보](https://www.data.go.kr/data/15095677/openapi.do)
-   - [건강보험심사평가원 약가기준정보(getDgamtList)](https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do) ← 약가, 별도 기관
-3. 마이페이지 → 인증키에서 **Decoding(일반 인증키)** 값을 복사
-4. 키를 등록 — 아래 둘 중 편한 방법
+   - [건강보험심사평가원 약가기준정보](https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do) ← 약가(별도 기관)
+3. **마이페이지 → 오픈API → 인증키 발급** 에서 **`일반 인증키 (Decoding)`** 값을 복사
 
-**방법 A — `.env` 파일 (권장)**
+> 💡 4개 다 신청하지 않아도 됩니다. 예를 들어 약가가 필요 없으면 앞의 3개만
+> 신청하세요. 신청 안 한 API는 자동으로 건너뜁니다(부분 실패 허용).
 
+### 키 등록 방법
+
+**방법 A — `.env` 파일 (권장, 한 번만 설정)**
 ```bash
-kdrug --init          # 현재 폴더에 .env 템플릿 생성 (python -m kdrug --init)
+kdrug --init          # 현재 폴더에 .env 템플릿 생성
 ```
-
 생성된 `.env` 를 열어 키를 채웁니다:
-
 ```dotenv
 KDRUG_API_KEY=여기에_Decoding_인증키
 ```
-
-`from_env()` 와 CLI 가 현재 폴더(및 상위 폴더)의 `.env` 를 **자동으로 읽습니다.**
-`.env` 는 `.gitignore` 로 보호되어 **git 에 절대 올라가지 않습니다.** 저장소에는
-키를 뺀 `.env.example` 만 포함됩니다.
+`from_env()` 와 CLI 가 현재(및 상위) 폴더의 `.env` 를 **자동으로 읽습니다.**
+`.env` 는 git 에 올라가지 않게 보호됩니다.
 
 **방법 B — 셸 환경변수**
-
 ```bash
 export KDRUG_API_KEY="여기에_Decoding_인증키"
 ```
 
-> ✅ **Decoding · Encoding 키 모두 지원합니다.** 키에 `%` 가 있으면 Encoding 키로
-> 자동 판별해 그대로 사용하고(이중 인코딩 방지), 없으면 Decoding 키로 보고 직접
-> 인코딩합니다. 자동 판별을 끄려면 `KdrugClient(api_key=..., key_is_encoded=True)`
-> 처럼 명시하세요.
->
-> ℹ️ `KDRUG_API_KEY` 외에 `DRUG_API_KEY_ENCODING` / `DRUG_API_KEY_DECODING`
-> 환경변수도 인식합니다(rxstock / Supabase Edge Function 시크릿과 동일한 이름이라
-> 그대로 재사용 가능). 실제 셸 환경변수가 항상 `.env` 파일보다 우선하며, `.env`
-> 자동 로드를 끄려면 `KdrugClient.from_env(use_dotenv=False)`.
+**방법 C — 코드에 직접 (간단 테스트용)**
+```python
+client = KdrugClient(api_key="여기에_인증키")
+```
+
+> ✅ **Decoding · Encoding 키 모두 자동 지원.** 키에 `%` 가 있으면 Encoding 키로
+> 자동 판별합니다. `DRUG_API_KEY_ENCODING` / `DRUG_API_KEY_DECODING` 환경변수도
+> 인식합니다.
 
 ---
 
-## 빠른 시작
+## 사용법
 
+### 품목기준코드(ITEM_SEQ)를 알 때 — 가장 정확
+
+`item_seq`(품목기준코드)는 의약품의 고유 번호입니다. 알고 있다면 이게 가장 정확합니다.
 ```python
-from kdrug import KdrugClient
-
-client = KdrugClient.from_env()            # KDRUG_API_KEY 환경변수 사용
-# client = KdrugClient(api_key="...")      # 직접 넘겨도 됩니다
-
-result = client.get_drug_info(item_seq="200410085")   # 리피토정20mg (급여)
-
-if result.ok:
-    info = result.info
-    print(info.item_name)                  # 리피토정20밀리그램(...)
-    print(info.sources)                    # ['grn', 'permit', 'product', 'cost']
-    print(info.identity.length_long)       # 낱알식별 치수
-    print(info.product.main_ingredient)    # 아토르바스타틴... (제품허가)
-    print(info.cost.max_price)             # 688 (약가 상한가, Decimal)
-else:
-    print("데이터 없음:", result.errors)
+result = client.get_drug_info(item_seq="200410085")
 ```
 
-평탄화된 단일 dict 로도 받을 수 있습니다 (DB 저장·JSON 직렬화에 편리):
+### 제품명만 알 때
 
+```python
+result = client.get_drug_info(item_name="리피토정20밀리그램")
+```
+제품명은 부분 일치도 됩니다. 여러 개가 잡히면 첫 번째가 사용됩니다.
+
+> 💡 **품목기준코드를 모를 때 찾는 법:** 먼저 이름으로 검색해 `item_seq` 를 얻고,
+> 그 코드로 정확 조회하세요.
+> ```python
+> hits = client.fetch_grn(item_name="리피토정")     # 후보 목록
+> for h in hits:
+>     print(h.item_seq, h.item_name)
+> ```
+
+### 4개 중 일부만 호출하고 싶을 때
+
+```python
+# 낱알식별만 (모양·색·치수)
+pills = client.fetch_grn(item_name="타이레놀")
+
+# e약은요만 (환자용 복약정보)
+guides = client.fetch_permit(item_seq="202106092")
+
+# 제품허가 상세만 (성분·문서)
+products = client.fetch_product(item_seq="202106092")
+
+# 약가만 (상한가) — 보험코드(mds_cd)나 제품명으로
+costs = client.fetch_cost(mds_cd="073400330")
+costs = client.fetch_cost(item_name="리피토정20밀리그램")
+```
+각 메서드는 **리스트**를 돌려줍니다(검색 결과가 여러 건일 수 있으므로).
+
+### 약가 조회 끄기
+
+약가(심평원)를 빼고 식약처 3종만 쓰려면:
+```python
+result = client.get_drug_info(item_seq="202106092", with_cost=False)
+```
+
+---
+
+## 결과 다루기
+
+`get_drug_info()` 는 `DrugInfoResult` 를 돌려줍니다.
+
+```python
+result = client.get_drug_info(item_seq="200410085")
+
+result.ok            # True = 하나 이상의 API에서 데이터를 받음
+result.errors        # {'permit': '...'} 처럼 실패한 API만 기록
+info = result.info   # 병합된 DrugInfo
+```
+
+`info` 안에는 4개 출처가 각각 들어 있습니다(없으면 `None`):
+
+```python
+info.item_name       # 대표 제품명
+info.sources         # ['grn', 'permit', 'product', 'cost'] — 실제로 받은 출처
+
+# 🟦 낱알식별
+if info.identity:
+    info.identity.drug_shape      # 모양 (예: 원형)
+    info.identity.color_class1    # 색
+    info.identity.length_long     # 장축 길이(mm)
+    info.identity.print_front     # 앞면 각인
+    info.identity.image_url       # 알약 사진 URL
+
+# 🟩 e약은요 (환자용)
+if info.permit:
+    info.permit.efficacy          # 효능
+    info.permit.use_method        # 사용법
+    info.permit.side_effect       # 부작용
+    info.permit.storage           # 보관법
+
+# 🟧 제품허가 상세
+if info.product:
+    info.product.main_ingredient  # 주성분
+    info.product.atc_code         # ATC 코드
+    info.product.storage_method   # 저장방법
+    info.product.ee_doc_data      # 효능효과 문서(HTML)
+    info.product.edi_code         # 보험코드
+
+# 🟨 약가 (심평원)
+if info.cost:
+    info.cost.max_price           # 상한가 (Decimal, 원)
+    info.cost.pay_type            # 급여/비급여
+    info.cost.spc_gnl_type        # 전문/일반
+```
+
+### 하나의 dict 로 평탄화
+
+DB 저장이나 JSON 응답에 편한 형태:
 ```python
 info.to_dict()
-# {'item_seq': '200410085', 'item_name': '리피토정20밀리그램...',
-#  'main_ingredient': '아토르바스타틴...', 'edi_code': '073400330',
+# {'item_seq': '200410085',
+#  'item_name': '리피토정20밀리그램(아토르바스타틴칼슘삼수화물)',
+#  'drug_shape': '원형', 'color1': '하양',
+#  'main_ingredient': '[M215219]아토르바스타틴칼슘삼수화물',
+#  'atc_code': 'C10AA05', 'edi_code': '073400330',
 #  'max_price': '688', 'pay_type': '급여',
-#  'sources': ['grn', 'permit', 'product', 'cost'], ...}
+#  'sources': ['grn', 'product', 'cost'], ...}
 ```
+
+> 비급여/일반의약품(OTC)은 보험 약가가 없어 `info.cost` 가 비어 있을 수 있습니다.
+> 정상입니다.
 
 ---
 
 ## CLI
 
-```bash
-export KDRUG_API_KEY="..."
+설치하면 `kdrug` 명령을 바로 쓸 수 있습니다.
 
-# 사람이 읽기 좋은 요약
-python -m kdrug --item-seq 199104100
+```bash
+# 품목기준코드로 조회 (사람이 읽기 좋은 요약)
+kdrug --item-seq 200410085
 
 # 제품명으로 검색
-python -m kdrug --item-name 타이레놀
+kdrug --item-name 타이레놀
 
-# JSON 출력 (파이프라인용)
-python -m kdrug --item-seq 199104100 --json
+# JSON 출력 (다른 도구로 넘기기 좋음)
+kdrug --item-seq 200410085 --json
+
+# .env 템플릿 만들기
+kdrug --init
 ```
 
-`pip install` 후에는 `kdrug --item-seq 199104100` 처럼 짧게 쓸 수 있습니다.
+출력 예시:
+```
+■ 리피토정20밀리그램(아토르바스타틴칼슘삼수화물)  (200410085)
+  제조/수입: 비아트리스코리아(주)
+  데이터 출처: grn, product, cost
+  [낱알식별]
+    제형/모양: 필름코팅정 / 원형
+    치수(mm): 7.5 × 7.5 × 4.5
+    색상: 하양
+    식별표시: 앞 'ATV' / 뒤 '20'
+  [제품허가 상세]
+    주성분: [M215219]아토르바스타틴칼슘삼수화물
+    ATC: C10AA05  허가일: 20041025  보험코드: 073400330
+  [약가 (심평원)]
+    상한가: 688원  급여: 급여  전문
+```
+
+> `kdrug` 가 인식되지 않으면 `python3 -m kdrug --item-name 타이레놀` 로 쓰세요.
 
 ---
 
@@ -158,7 +308,7 @@ python -m kdrug --item-seq 199104100 --json
 | 메서드 | 반환 | 설명 |
 |--------|------|------|
 | `KdrugClient(api_key=...)` | — | 키를 직접 지정해 생성 |
-| `KdrugClient.from_env()` | `KdrugClient` | `KDRUG_API_KEY` 환경변수로 생성 |
+| `KdrugClient.from_env()` | `KdrugClient` | 환경변수/`.env` 로 생성 |
 | `get_drug_info(item_seq=, item_name=, with_cost=True, strict=False)` | `DrugInfoResult` | **4종 통합 조회 (권장)** |
 | `fetch_grn(item_seq=, item_name=, rows=10)` | `list[PillIdentity]` | 낱알식별만 |
 | `fetch_permit(...)` | `list[DrugPermit]` | e약은요만 |
@@ -166,27 +316,22 @@ python -m kdrug --item-seq 199104100 --json
 | `fetch_cost(mds_cd=, item_name=, manufacturer=)` | `list[DrugCost]` | 약가만 (심평원) |
 | `fetch_grn_raw(...)` 등 | `list[dict]` | 가공 전 원본 응답 |
 
-생성자 옵션: `timeout`(기본 8초), `retries`(기본 2회), `grn_endpoint`/`permit_endpoint`/
-`product_endpoint`/`cost_endpoint` 오버라이드, `user_agent`.
-
-`get_drug_info` 의 `strict=True` 로 두면 일부 API 실패 시 예외를 던집니다.
-기본값(`False`)은 실패를 `result.errors` 에 모으고 받은 데이터만 병합합니다.
+생성자 옵션: `timeout`(기본 8초), `retries`(기본 2회),
+`grn_endpoint`/`permit_endpoint`/`product_endpoint`/`cost_endpoint` 오버라이드, `user_agent`.
 
 ### `DrugInfoResult`
-
 - `.info` → `DrugInfo` (병합 결과)
-- `.errors` → `{api_name: error_msg}` (실패한 API)
+- `.errors` → `{api_name: error_msg}` (실패한 API만)
 - `.ok` / `bool(result)` → 하나 이상 데이터를 받았는가
 
 ### dataclass
-
 - `DrugInfo` — `item_seq`, `item_name`, `entp_name`, `sources`, `identity`, `permit`, `product`, `cost`, `.to_dict()`
 - `PillIdentity` — 낱알식별 (치수·색상·식별표시·이미지)
 - `DrugPermit` — e약은요 (효능·사용법·주의·부작용·보관·낱알이미지)
 - `DrugProduct` — 제품허가 상세 (성분·ATC·저장·허가일·효능/용법/주의 문서·보험코드)
 - `DrugCost` — 약가 (`max_price` 상한가 `Decimal`·급여구분·주성분코드)
 
-전체 필드는 [`docs/fields.md`](docs/fields.md) 에 표로 정리돼 있습니다.
+전체 필드 목록은 [`docs/fields.md`](docs/fields.md) 참고.
 
 ---
 
@@ -196,7 +341,7 @@ python -m kdrug --item-seq 199104100 --json
 from kdrug import KdrugError, KdrugAuthError, KdrugHTTPError, KdrugResponseError
 
 try:
-    result = client.get_drug_info(item_seq="199104100", strict=True)
+    result = client.get_drug_info(item_seq="200410085", strict=True)
 except KdrugAuthError:
     ...   # 인증키 누락/오류
 except KdrugHTTPError as e:
@@ -207,17 +352,46 @@ except KdrugError:
     ...   # 위 모두의 부모 — 한 번에 잡기
 ```
 
-공공데이터포털의 "데이터 없음"(resultCode `03`)은 **오류가 아니라 빈 결과**로
-처리합니다.
+기본값(`strict=False`)은 예외를 던지지 않고, 실패한 API를 `result.errors` 에
+모은 뒤 **성공한 데이터만 병합**합니다. 공공API의 "데이터 없음"(resultCode `03`)은
+오류가 아니라 빈 결과로 처리합니다.
 
 ---
 
-## 개발
+## 자주 묻는 질문
+
+**Q. `item_seq` 가 뭔가요?**
+품목기준코드 — 의약품마다 부여된 고유 번호입니다. 모르면 `item_name`(제품명)으로
+검색하면 됩니다.
+
+**Q. 어떤 API는 403(Forbidden)이 떠요.**
+그 API에 대한 **활용신청이 아직 승인되지 않은** 것입니다. 공공데이터포털에서 해당
+API를 활용신청하세요. 승인 직후 키에 반영되기까지 수십 분~수 시간 걸릴 수 있습니다.
+그동안에도 승인된 API 결과는 정상적으로 받습니다.
+
+**Q. `info.cost`(약가)가 비어 있어요.**
+일반의약품(OTC)·비급여 품목은 건강보험 약가가 없습니다. 정상입니다.
+
+**Q. 키를 넣었는데 인증 오류가 나요.**
+`Decoding(일반 인증키)` 값을 쓰는지 확인하세요. (Encoding 키도 자동 지원하지만,
+직접 다룰 땐 Decoding 권장.)
+
+**Q. 엔드포인트가 바뀌면요?**
+정부 API는 가끔 버전을 올립니다. 생성자 인자나 `KDRUG_*_ENDPOINT` 환경변수로
+주소를 덮어쓸 수 있습니다.
+
+---
+
+## 개발 / 기여
 
 ```bash
+git clone https://github.com/lunapsy/kdrug-client.git
+cd kdrug-client
 pip install -e ".[dev]"
 pytest            # 네트워크 없이 동작 (응답을 mock)
 ```
+
+이슈·PR 환영합니다: https://github.com/lunapsy/kdrug-client
 
 ---
 
@@ -225,6 +399,6 @@ pytest            # 네트워크 없이 동작 (응답을 mock)
 
 MIT — 자유롭게 사용/수정/배포하세요. 자세한 내용은 [LICENSE](LICENSE).
 
-이 라이브러리는 공공데이터포털 데이터를 **가공해 전달**할 뿐이며, 데이터의
-정확성·최신성은 원 제공기관(식품의약품안전처)에 따릅니다. 임상적 판단의 최종
-근거로 사용하기 전 원본을 확인하세요.
+> 이 라이브러리는 공공데이터포털 데이터를 **가공해 전달**할 뿐이며, 데이터의
+> 정확성·최신성은 원 제공기관(식품의약품안전처·건강보험심사평가원)을 따릅니다.
+> 임상적 판단의 최종 근거로 쓰기 전 원본을 확인하세요.
