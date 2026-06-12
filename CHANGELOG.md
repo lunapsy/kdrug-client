@@ -8,6 +8,10 @@
 - README 전면 보강 — `pip install` 기준 설치, 빠른 시작 3단계, 단계별 사용법
   (품목코드/제품명/개별 API/약가 끄기), 결과 다루기 가이드, CLI 출력 예시,
   자주 묻는 질문(FAQ) 추가. 코드 변경 없음.
+- **영어 README 추가** ([README.en.md](README.en.md)) + 한/영 언어 전환 링크.
+- **전체 77개 컬럼 완전 수록** — `docs/fields.md` 를 한·영 병기 + 원본 API 키
+  매핑으로 재작성(PillIdentity 23 · DrugPermit 13 · DrugProduct 28 · DrugCost 13),
+  README 에도 전체 필드명 목록 추가.
 
 ## [0.2.0] - 2026-06-12
 

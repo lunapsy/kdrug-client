@@ -1,5 +1,7 @@
 # kdrug-client
 
+**한국어** · [English](README.en.md)
+
 [![PyPI](https://img.shields.io/pypi/v/kdrug-client.svg)](https://pypi.org/project/kdrug-client/)
 [![Python](https://img.shields.io/pypi/pyversions/kdrug-client.svg)](https://pypi.org/project/kdrug-client/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -331,7 +333,31 @@ kdrug --init
 - `DrugProduct` — 제품허가 상세 (성분·ATC·저장·허가일·효능/용법/주의 문서·보험코드)
 - `DrugCost` — 약가 (`max_price` 상한가 `Decimal`·급여구분·주성분코드)
 
-전체 필드 목록은 [`docs/fields.md`](docs/fields.md) 참고.
+### 전체 필드 목록 (77개)
+
+한·영 설명과 원본 API 키 매핑은 [`docs/fields.md`](docs/fields.md) 에 표로 정리돼
+있습니다. 필드명만 한눈에:
+
+**🟦 PillIdentity (23)** — `item_seq` `item_name` `entp_name` `bizrno`
+`length_long` `length_short` `thickness` `drug_shape` `form_code_name`
+`is_capsule` `color_class1` `color_class2` `print_front` `print_back`
+`mark_front` `mark_back` `line_front` `line_back` `class_no` `class_name`
+`etc_otc` `chart` `image_url`
+
+**🟩 DrugPermit (13)** — `item_seq` `item_name` `entp_name` `efficacy`
+`use_method` `warning` `caution` `interaction` `side_effect` `storage`
+`open_date` `update_date` `image_url`
+
+**🟧 DrugProduct (28)** — `item_seq` `item_name` `item_eng_name` `entp_name`
+`entp_eng_name` `bizrno` `main_ingredient` `main_ingredient_eng` `material_name`
+`storage_method` `valid_term` `pack_unit` `total_content` `atc_code`
+`etc_otc_code` `permit_kind_name` `newdrug_class_name` `narcotic_kind_code`
+`rare_drug_yn` `chart` `item_permit_date` `cancel_date` `cancel_name` `edi_code`
+`bar_code` `ee_doc_data` `ud_doc_data` `nb_doc_data`
+
+**🟨 DrugCost (13)** — `mds_cd` `item_name` `manufacturer` `max_price` `pay_type`
+`spc_gnl_type` `injection_path` `gnl_name_code` `unit` `spec_name` `meft_div_no`
+`substitutable` `apply_start_date`
 
 ---
 
