@@ -1,0 +1,43 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kdrug-client"
+version = "0.2.0"
+description = "공공데이터포털 의약품 4종 OpenAPI(낱알식별·e약은요·제품허가·약가)를 하나로 묶은 의존성 없는 파이썬 클라이언트"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "lunap" }]
+keywords = ["korea", "drug", "pharmacy", "data.go.kr", "openapi", "의약품", "공공데이터"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Healthcare Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+# 런타임 의존성 없음 — 표준 라이브러리(urllib)만 사용.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
+[project.urls]
+Homepage = "https://github.com/lunapsy/kdrug-client"
+Issues = "https://github.com/lunapsy/kdrug-client/issues"
+
+[project.scripts]
+kdrug = "kdrug.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kdrug"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

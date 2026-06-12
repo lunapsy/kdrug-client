@@ -1,0 +1,25 @@
+{
+  "header": {"resultCode": "00", "resultMsg": "NORMAL SERVICE."},
+  "body": {
+    "numOfRows": 1,
+    "pageNo": 1,
+    "totalCount": 1,
+    "items": [
+      {
+        "entpName": "한미약품(주)",
+        "itemName": "한미아스피린장용정100밀리그램",
+        "itemSeq": "200003092",
+        "efcyQesitm": "이 약은 심근경색, 뇌경색, 불안정형 협심증에서 혈전 생성 억제에 사용합니다.",
+        "useMethodQesitm": "성인은 1회 1정, 1일 1회 복용합니다. 충분한 물과 함께 식전에 복용할 수 있습니다.",
+        "atpnWarnQesitm": "매일 세잔 이상 정기적 음주자가 이 약 또는 다른 해열진통제를 복용할 때는 의사 또는 약사와 상의하십시오.",
+        "atpnQesitm": "이 약 또는 다른 살리실산제제에 과민증 환자, 소화성궤양 환자는 복용하지 마십시오.",
+        "intrcQesitm": "다른 비스테로이드성 소염진통제와 병용 시 출혈이 증가될 수 있습니다.",
+        "seQesitm": "쇽 증상(호흡곤란, 두드러기), 천식발작, 과민증이 나타날 수 있습니다.",
+        "depositMethodQesitm": "습기를 피해 실온에서 보관하십시오. 어린이의 손이 닿지 않는 곳에 보관하십시오.",
+        "openDe": "20200901",
+        "updateDe": "20200905",
+        "itemImage": "https://nedrug.mfds.go.kr/pbp/cmn/itemImageDownload/147426411393800107"
+      }
+    ]
+  }
+}
