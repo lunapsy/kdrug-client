@@ -332,6 +332,13 @@ You haven't been approved for that API yet. Request access on the portal.
 Approval can take minutes to hours to propagate to your key. Meanwhile the
 approved APIs still return data.
 
+**Q. For some drugs, e약은요 (or another source) is empty.**
+**That's not a bug.** Each of the four APIs covers a different set of drugs.
+e약은요, for example, mostly covers common drugs, so some prescription drugs
+(e.g. Lipitor) may have an empty `info.permit`. In that case `result.errors` is
+empty (it isn't an error) and the other sources are merged normally. Check
+`info.sources` to see which sources you actually received.
+
 **Q. `info.cost` (price) is empty.**
 OTC / non-reimbursed drugs have no NHI price. That's normal.
 
