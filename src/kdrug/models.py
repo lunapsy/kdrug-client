@@ -271,8 +271,9 @@ class MarketStatus:
     """유통 상태 요약 — 생산·수입실적 + 공급중단 보고 결합.
 
     "허가는 살아있는데 실제로 시장에 공급되고 있는가?"에 답한다.
-    주문/발주 시스템 연동 시 죽은 품목(허가만 있고 미생산/미수입)을 걸러내는
-    용도로 설계됐다. ``KdrugClient.get_market_status()`` 가 만든다.
+    허가만 있고 실제 생산·수입되지 않는 품목을 걸러낼 때 쓴다.
+    ``KdrugClient.get_market_status()`` 가 만들며, ``get_drug_info(with_market=True)``
+    로 통합 조회에 포함시킬 수도 있다.
     """
 
     item_seq: str = ""
@@ -313,11 +314,13 @@ class DrugInfo:
     """4종 API 결과를 병합한 통합 의약품 정보.
 
     ``sources`` 에는 실제로 데이터가 들어온 API 이름이 담긴다
-    (예: ["grn", "permit", "product", "cost"]). 각 원본 dataclass 는
-    ``identity / permit / product / cost`` 로 그대로 접근 가능.
+    (예: ["grn", "permit", "product", "cost", "market"]). 각 원본 dataclass 는
+    ``identity / permit / product / cost / market`` 로 그대로 접근 가능.
 
     조인: grn/permit/product 는 item_seq 기준, cost(약가)는 제품허가 보험코드
-    (EDI_CODE = mds_cd) 또는 품목명 기준으로 붙는다.
+    (EDI_CODE = mds_cd) 또는 품목명 기준으로 붙는다. market(유통 상태)은
+    ``get_drug_info(with_market=True)`` 일 때만 채워지며,
+    ``get_market_status()`` 로 유통 상태만 따로 다시 조회할 수도 있다.
     """
 
     item_seq: str = ""
@@ -329,9 +332,16 @@ class DrugInfo:
     permit: Optional[DrugPermit] = None
     product: Optional[DrugProduct] = None
     cost: Optional[DrugCost] = None
+    market: Optional["MarketStatus"] = None
 
     def to_dict(self) -> dict[str, Any]:
-        """평탄화된 단일 dict — 식별→복약→허가→약가 순으로 채우되 빈 값은 덮지 않는다."""
+        """평탄화된 단일 dict — 식별→복약→허가→약가 순으로 채우되 빈 값은 덮지 않는다.
+
+        ``market`` 이 있으면 유통 상태 스칼라(``is_marketed`` / ``has_record`` /
+        ``latest_year`` / ``latest_amount`` / ``market_part`` / ``is_suspended``)도
+        같은 dict 에 평탄화된다. 원본 레코드 리스트는 ``.market.records`` /
+        ``.market.suspend_reports`` 로 접근한다.
+        """
         merged: dict[str, Any] = {}
         for part in (self.identity, self.permit, self.product, self.cost):
             if part is None:
@@ -339,6 +349,15 @@ class DrugInfo:
             for k, v in part.to_dict().items():
                 if k not in merged or merged[k] in (None, ""):
                     merged[k] = v
+        if self.market is not None:
+            m = self.market
+            merged["is_marketed"] = m.is_marketed
+            merged["has_record"] = m.has_record
+            merged["latest_year"] = m.latest_year
+            merged["latest_amount"] = (
+                str(m.latest_amount) if m.latest_amount is not None else None)
+            merged["market_part"] = m.part          # "생산"/"수입" ("part"는 너무 일반적)
+            merged["is_suspended"] = m.is_suspended
         merged["item_seq"] = self.item_seq or merged.get("item_seq", "")
         merged["item_name"] = self.item_name or merged.get("item_name", "")
         merged["entp_name"] = self.entp_name or merged.get("entp_name", "")

@@ -240,3 +240,80 @@ def test_market_status_to_dict():
     d = s.to_dict()
     assert d["is_marketed"] is True
     assert d["latest_amount"] == "10.5"     # Decimal 은 문자열로 직렬화
+
+
+# ── get_drug_info(with_market=True) — 통합 평탄화 ─────────────────────
+
+
+PRODUCT_ROW_JW = {  # 제품허가 상세 (품목명 해석용)
+    "ITEM_SEQ": "195500005",
+    "ITEM_NAME": "중외5%포도당생리식염액",
+    "ENTP_NAME": "제이더블유중외제약(주)",
+    "MAIN_ITEM_INGR": "포도당",
+}
+
+
+def _envelope(items, result_code="00"):
+    return {
+        "response": {
+            "header": {"resultCode": result_code, "resultMsg": "OK"},
+            "body": {"items": items},
+        }
+    }
+
+
+def test_get_drug_info_with_market_flattens(monkeypatch):
+    """with_market=True 면 유통 상태 스칼라가 to_dict() 평탄화에 포함된다."""
+    client = _make_client(monkeypatch, {
+        "DrugPrdtPrmsnInfoService07": _envelope([PRODUCT_ROW_JW]),
+        "MdcinPrdctnImportAcmsltService02": _flat_envelope([{"item": PRODUCTION_ROW}]),
+    })
+    result = client.get_drug_info(item_seq="195500005", with_market=True,
+                                  with_cost=False)
+    info = result.info
+    assert info.market is not None
+    assert info.market.is_marketed is True
+    assert "market" in info.sources
+
+    d = info.to_dict()
+    assert d["is_marketed"] is True
+    assert d["has_record"] is True
+    assert d["latest_year"] == "2024"
+    assert d["latest_amount"] == "4000.39"
+    assert d["market_part"] == "생산"
+    assert d["is_suspended"] is False
+
+
+def test_get_drug_info_without_market_default(monkeypatch):
+    """기본값(with_market=False)은 기존과 동일 — market 없음, 평탄화에도 없음."""
+    client = _make_client(monkeypatch, {
+        "DrugPrdtPrmsnInfoService07": _envelope([PRODUCT_ROW_JW]),
+    })
+    result = client.get_drug_info(item_seq="195500005", with_cost=False)
+    assert result.info.market is None
+    assert "market" not in result.info.sources
+    assert "is_marketed" not in result.info.to_dict()
+
+
+def test_market_status_standalone_refresh(monkeypatch):
+    """통합 조회와 별개로 get_market_status 만 다시 호출해 상태를 갱신할 수 있다."""
+    client = _make_client(monkeypatch, {
+        "DrugPrdtPrmsnInfoService07": _envelope([PRODUCT_ROW_JW]),
+        "MdcinPrdctnImportAcmsltService02": _flat_envelope([{"item": PRODUCTION_ROW}]),
+    })
+    # 1) 통합 조회로 한 번
+    info = client.get_drug_info(item_seq="195500005", with_market=True,
+                                with_cost=False).info
+    assert info.market.is_marketed is True
+
+    # 2) 이후 공급중단 보고가 새로 올라온 상황 시뮬레이션
+    suspended = {**SUPPLY_ROW, "ITEM_SEQ": "195500005",
+                 "ITEM_NAME": "중외5%포도당생리식염액"}
+    client2 = _make_client(monkeypatch, {
+        "MdcinPrdctnImportAcmsltService02": _flat_envelope([{"item": PRODUCTION_ROW}]),
+        "MdcinPrdctnIncmeSuplyService2": _flat_envelope([suspended]),
+    })
+    refreshed = client2.get_market_status(
+        item_seq="195500005", item_name="중외5%포도당생리식염액")
+    assert refreshed.status.is_suspended is True
+    assert refreshed.status.is_marketed is False   # 상태만 따로 갱신됨

@@ -8,8 +8,7 @@
 
 식약처 생산수입공급중단정보(`MdcinPrdctnIncmeSuplyService2`)와
 생산·수입실적현황(`MdcinPrdctnImportAcmsltService02`)을 5·6번째 소스로 추가.
-**허가만 받아놓고 실제 생산·수입하지 않는 품목**을 걸러낼 수 있게 됐다 —
-주문/발주 시스템 연동 시 필요한 바로 그 판별.
+**허가만 받아놓고 실제 생산·수입하지 않는 품목**을 걸러낼 수 있게 됐다.
 
 - `SupplyReport`(21 필드) / `ProductionRecord`(8 필드) dataclass +
   `parse_supply` / `parse_production` + `fetch_supply(item_name=/entp_name=)` /
@@ -17,6 +16,12 @@
 - **`get_market_status(item_seq=/item_name=)`** — 두 API를 결합해
   `MarketStatus.is_marketed` (실적 있음 + 중단 보고 없음) 하나로 답한다.
   `MarketStatusResult` 는 `DrugInfoResult` 와 같은 `.errors` 부분 실패 패턴.
+- **`get_drug_info(with_market=True)`** — 유통 상태를 통합 조회에 포함.
+  `info.market` 으로 원본 접근, `info.to_dict()` 평탄화에 `is_marketed` /
+  `has_record` / `latest_year` / `latest_amount` / `market_part` /
+  `is_suspended` 가 함께 들어간다. 유통 상태만 따로 갱신하려면
+  `get_market_status()` 를 그대로 쓰면 된다 (실적은 연 1회, 중단 보고는
+  일 1회 갱신이라 분리 갱신이 유용).
 - 두 API 모두 **item_seq 검색 미지원**(파라미터가 조용히 무시됨 — 라이브 확인)
   → 품목명 검색 후 응답 `ITEM_SEQ` 클라이언트 매칭. item_seq 만 주면 제품허가
   상세에서 품목명을 먼저 해석한다(허가취하 품목은 `item_name` 직접 전달 필요).

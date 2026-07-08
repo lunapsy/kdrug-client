@@ -317,16 +317,23 @@ class KdrugClient:
     def get_drug_info(self, *, item_seq: Optional[str] = None,
                       item_name: Optional[str] = None,
                       with_cost: bool = True,
+                      with_market: bool = False,
                       strict: bool = False) -> "DrugInfoResult":
-        """4종 API를 한 번에 호출해 ``DrugInfo`` 로 병합.
+        """여러 API를 한 번에 호출해 ``DrugInfo`` 로 병합.
 
         낱알식별·e약은요·제품허가는 item_seq 로, 약가(cost)는 제품허가의 보험코드
         (EDI_CODE = mds_cd)로 정확 조인하고, 보험코드가 없으면 품목명으로 조회한다.
 
+        ``with_market=True`` 면 유통 상태(생산·수입실적 + 공급중단)까지 붙여서
+        ``info.market`` 과 ``info.to_dict()`` 평탄화에 포함한다. 유통 상태만
+        나중에 따로 갱신하려면 ``get_market_status()`` 를 쓰면 된다 (같은 결과).
+
         Args:
-            item_seq: 품목기준코드 (권장 — 식약처 3종 공통 조인 키).
+            item_seq: 품목기준코드 (권장 — 식약처 공통 조인 키).
             item_name: 제품명 (item_seq 없을 때 사용).
             with_cost: 약가(심평원) 조회 포함 여부 (기본 True).
+            with_market: 유통 상태(실적+공급중단) 조회 포함 여부 (기본 False —
+                API 2회가 추가되므로 옵트인).
             strict: True 면 일부 API 실패 시 예외. False(기본) 면 실패를
                 ``result.errors`` 에 모아두고 받은 데이터만 병합.
 
@@ -365,9 +372,21 @@ class KdrugClient:
                 cost = self._safe_one(
                     self.fetch_cost, "cost", errors, strict, item_name=resolved_name)
 
+        # 유통 상태 (선택): 실적+공급중단 — 실패는 errors 로 흡수 (strict 존중)
+        market = None
+        if with_market and (resolved_seq or resolved_name):
+            market_result = self.get_market_status(
+                item_seq=resolved_seq or None,
+                item_name=resolved_name or None,
+                strict=strict)
+            errors.update(market_result.errors)
+            market = market_result.status
+
         sources = [name for name, part in
                    (("grn", identity), ("permit", permit),
-                    ("product", product), ("cost", cost)) if part]
+                    ("product", product), ("cost", cost),
+                    ("market", market if (market and (market.has_record
+                     or market.suspend_reports)) else None)) if part]
 
         info = DrugInfo(
             item_seq=resolved_seq,
@@ -378,6 +397,7 @@ class KdrugClient:
             permit=permit,
             product=product,
             cost=cost,
+            market=market,
         )
         return DrugInfoResult(info=info, errors=errors)
 
@@ -389,8 +409,10 @@ class KdrugClient:
                           strict: bool = False) -> "MarketStatusResult":
         """공급중단·생산수입실적 2종을 결합해 유통 상태(``MarketStatus``)로 병합.
 
-        "허가는 있는데 실제로 시장에 공급되고 있는가?"에 답한다. 주문/발주 연동 시
-        **허가만 받고 생산·수입하지 않는 품목**을 걸러내는 용도.
+        "허가는 있는데 실제로 시장에 공급되고 있는가?"에 답한다.
+        **허가만 받고 생산·수입하지 않는 품목**을 걸러낼 때 쓴다.
+        ``get_drug_info(with_market=True)`` 에 포함시킬 수도 있고, 이 메서드로
+        유통 상태만 따로 (재)조회할 수도 있다.
 
         두 API 모두 item_seq 검색이 안 되므로 품목명으로 검색한 뒤 응답의
         ITEM_SEQ 로 매칭한다. item_seq 만 주어지면 제품허가 상세에서 품목명을

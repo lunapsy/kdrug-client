@@ -36,8 +36,8 @@ print(info.cost.max_price)            # 상한가 (급여 의약품인 경우)
 **특징**
 - 🪶 **의존성 0** — 표준 라이브러리(`urllib`)만 씁니다. `pip install` 하나면 끝.
 - 🔗 **자동 조인** — 품목기준코드 하나로 여러 API를 호출해 **하나의 객체**로 합쳐줍니다.
-- 📦 **유통 상태 판별** — `get_market_status()` 하나로 "이 약이 실제로 시장에
-  공급되고 있는가?"를 답합니다. 주문/발주 시스템 연동에 바로 쓸 수 있습니다.
+- 📦 **유통 상태 판별** — 허가만 살아있고 실제로는 생산·수입되지 않는 품목을
+  걸러냅니다. 통합 조회에 포함하거나(`with_market=True`) 따로 조회할 수 있습니다.
 - 🛟 **부분 실패 허용** — 한 API가 막혀도(403/오류) 나머지 데이터는 그대로 받습니다.
 - 🧩 **타입 친화적** — `dataclass` 반환이라 IDE 자동완성이 됩니다.
 - 💻 **CLI 포함** — 터미널에서 `kdrug --item-name 타이레놀` 한 줄로 조회.
@@ -275,9 +275,27 @@ info.to_dict()
 ## 유통 상태 확인
 
 허가는 살아있는데 **실제로는 생산도 수입도 하지 않는 품목**이 있습니다.
-의약품 데이터를 주문/발주 시스템과 연동하면 이런 품목이 주문 실패의 원인이 됩니다.
-`get_market_status()` 는 생산·수입실적과 공급중단 보고 2종 API를 결합해
-"이 약이 실제로 시장에 공급되고 있는가?"를 한 번에 답합니다.
+생산·수입실적과 공급중단 보고 2종 API를 결합해 "이 약이 실제로 시장에
+공급되고 있는가?"를 한 번에 답합니다.
+
+**방법 1 — 통합 조회에 포함** (`with_market=True`): 유통 상태 필드가
+`to_dict()` 평탄화에 함께 들어갑니다.
+
+```python
+result = client.get_drug_info(item_seq="202106092", with_market=True)
+
+info = result.info
+info.market.is_marketed    # 원본 dataclass 로 접근
+info.to_dict()             # 평탄화 dict 에 유통 필드 포함:
+# {'item_name': '타이레놀정500밀리그람...', 'atc_code': 'N02BE01', ...
+#  'is_marketed': True, 'has_record': True, 'latest_year': '2024',
+#  'latest_amount': '27343800', 'market_part': '수입', 'is_suspended': False,
+#  'sources': ['grn', 'permit', 'product', 'market']}
+```
+
+**방법 2 — 유통 상태만 따로 조회/갱신** (`get_market_status()`):
+실적은 연 1회, 공급중단 보고는 일 1회 갱신되므로 유통 상태만 주기적으로
+다시 확인할 때 유용합니다.
 
 ```python
 result = client.get_market_status(item_seq="202106092")
@@ -291,15 +309,6 @@ s.part             # "생산" 또는 "수입"
 s.is_suspended     # 공급중단 보고 존재 여부
 s.suspend_reports  # SupplyReport 리스트 — 중단사유·최종공급일·자사재고량
 s.records          # ProductionRecord 리스트 — 연도별 원본 실적
-```
-
-주문 연동의 전형적인 흐름:
-
-```python
-for seq in my_item_seqs:
-    result = client.get_market_status(item_seq=seq)
-    if not result.status.is_marketed:
-        mark_unorderable(seq)    # 허가만 있음 / 공급중단 / 허가취하
 ```
 
 두 API 를 따로 쓸 수도 있습니다:
@@ -379,7 +388,7 @@ kdrug --init
 |--------|------|------|
 | `KdrugClient(api_key=...)` | — | 키를 직접 지정해 생성 |
 | `KdrugClient.from_env()` | `KdrugClient` | 환경변수/`.env` 로 생성 |
-| `get_drug_info(item_seq=, item_name=, with_cost=True, strict=False)` | `DrugInfoResult` | **4종 통합 조회 (권장)** |
+| `get_drug_info(item_seq=, item_name=, with_cost=True, with_market=False, strict=False)` | `DrugInfoResult` | **통합 조회 (권장)** — `with_market=True` 면 유통 상태 포함 |
 | `get_market_status(item_seq=, item_name=, rows=50, strict=False)` | `MarketStatusResult` | **유통 상태 (실적+공급중단 결합)** |
 | `fetch_grn(item_seq=, item_name=, rows=10)` | `list[PillIdentity]` | 낱알식별만 |
 | `fetch_permit(...)` | `list[DrugPermit]` | e약은요만 |

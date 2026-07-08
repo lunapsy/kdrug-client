@@ -53,7 +53,8 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     try:
-        result = client.get_drug_info(item_seq=args.item_seq, item_name=args.item_name)
+        result = client.get_drug_info(item_seq=args.item_seq, item_name=args.item_name,
+                                      with_market=args.market)
     except KdrugError as e:
         print(f"조회 실패: {e}", file=sys.stderr)
         return 1
@@ -65,25 +66,14 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  [{api}] {err}", file=sys.stderr)
         return 1
 
-    merged = result.info.to_dict()
-
-    market = None
-    if args.market:
-        try:
-            market = client.get_market_status(
-                item_seq=result.info.item_seq or args.item_seq,
-                item_name=result.info.item_name or args.item_name)
-        except KdrugError as e:
-            print(f"유통 상태 조회 실패: {e}", file=sys.stderr)
+    merged = result.info.to_dict()   # --market 이면 유통 상태 필드도 평탄화돼 있음
 
     if args.json:
-        if market is not None:
-            merged["market_status"] = market.status.to_dict()
         print(json.dumps(merged, ensure_ascii=False, indent=2, default=str))
     else:
         _print_human(result)
-        if market is not None:
-            _print_market(market)
+        if result.info.market is not None:
+            _print_market(result.info.market)
     return 0
 
 
@@ -142,8 +132,7 @@ def _print_human(result) -> None:
             print(f"    [{api}] {err}")
 
 
-def _print_market(result) -> None:
-    s = result.status
+def _print_market(s) -> None:
     print("  [유통 상태 — 생산·수입실적 + 공급중단]")
     mark = "✅ 유통 중" if s.is_marketed else "⛔ 유통 확인 안 됨"
     print(f"    {mark}  (실적: {'있음' if s.has_record else '없음'} / "
@@ -155,9 +144,6 @@ def _print_market(result) -> None:
         if r.is_suspended:
             reason = (r.suspend_reason or "-")[:50]
             print(f"    중단보고: {r.suspend_date} ({r.report_flag}) — {reason}")
-    if result.errors:
-        for api, err in result.errors.items():
-            print(f"    ⚠ [{api}] {err}")
 
 
 if __name__ == "__main__":

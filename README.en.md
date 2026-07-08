@@ -36,8 +36,9 @@ response formats by hand, this library does it for you. (The data is Korean.)
 **Highlights**
 - 🪶 **Zero dependencies** — standard library (`urllib`) only.
 - 🔗 **Automatic join** — one item code calls the APIs and merges into one object.
-- 📦 **Market-status check** — `get_market_status()` answers "is this drug actually
-  on the market?" in one call. Built for order-system integration.
+- 📦 **Market-status check** — detects products whose permit is alive but which
+  are not actually produced or imported. Include it in the merged lookup
+  (`with_market=True`) or query it separately.
 - 🛟 **Partial-failure tolerant** — if one API is blocked (403/error), you still get the rest.
 - 🧩 **Typed** — returns `dataclass`es for IDE autocompletion.
 - 💻 **CLI included** — `kdrug --item-name 타이레놀` in the terminal.
@@ -238,9 +239,27 @@ info.to_dict()
 ## Market status
 
 Some products hold a valid permit but are **never actually produced or imported**.
-If you integrate drug data with an ordering system, these dead items cause failed
-orders. `get_market_status()` combines two APIs — production/import records and
-supply-suspension reports — to answer "is this drug actually on the market?":
+Two APIs — production/import records and supply-suspension reports — are combined
+to answer "is this drug actually on the market?".
+
+**Option 1 — include in the merged lookup** (`with_market=True`): the market
+fields join the flattened `to_dict()`.
+
+```python
+result = client.get_drug_info(item_seq="202106092", with_market=True)
+
+info = result.info
+info.market.is_marketed    # access the raw dataclass
+info.to_dict()             # flattened dict now includes market fields:
+# {'item_name': '타이레놀정500밀리그람...', 'atc_code': 'N02BE01', ...
+#  'is_marketed': True, 'has_record': True, 'latest_year': '2024',
+#  'latest_amount': '27343800', 'market_part': '수입', 'is_suspended': False,
+#  'sources': ['grn', 'permit', 'product', 'market']}
+```
+
+**Option 2 — query/refresh market status separately** (`get_market_status()`):
+records update yearly but suspension reports update daily, so refreshing just
+the market status periodically is often what you want.
 
 ```python
 result = client.get_market_status(item_seq="202106092")
@@ -254,15 +273,6 @@ s.part             # "생산" (production) or "수입" (import)
 s.is_suspended     # a supply-suspension report exists
 s.suspend_reports  # SupplyReport list — reason, last supply date, inventory
 s.records          # ProductionRecord list — yearly raw records
-```
-
-Typical order-integration flow:
-
-```python
-for seq in my_item_seqs:
-    result = client.get_market_status(item_seq=seq)
-    if not result.status.is_marketed:
-        mark_unorderable(seq)    # permit-only, discontinued, or revoked
 ```
 
 The two APIs are also available individually:
@@ -310,7 +320,7 @@ If `kdrug` isn't found, use `python3 -m kdrug --item-name 타이레놀`.
 |--------|---------|-------------|
 | `KdrugClient(api_key=...)` | — | create with an explicit key |
 | `KdrugClient.from_env()` | `KdrugClient` | create from env / `.env` |
-| `get_drug_info(item_seq=, item_name=, with_cost=True, strict=False)` | `DrugInfoResult` | **4-API merged lookup (recommended)** |
+| `get_drug_info(item_seq=, item_name=, with_cost=True, with_market=False, strict=False)` | `DrugInfoResult` | **merged lookup (recommended)** — `with_market=True` adds market status |
 | `get_market_status(item_seq=, item_name=, rows=50, strict=False)` | `MarketStatusResult` | **market status (records + suspensions)** |
 | `fetch_grn(item_seq=, item_name=, rows=10)` | `list[PillIdentity]` | pill identification |
 | `fetch_permit(...)` | `list[DrugPermit]` | e약은요 |
