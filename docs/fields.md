@@ -213,10 +213,15 @@ query by `mds_cd` (insurance code) or product name. Non-reimbursed items have no
 
 Filled in order **identity → permit → product → cost**; existing non-empty values
 are not overwritten. So when the same field appears in multiple sources, the
-earliest one wins.
+earliest one wins. With `with_market=True`, the market scalars (`is_marketed`
+`has_record` `latest_year` `latest_amount` `market_part` `is_suspended`) are
+appended to the same dict (raw lists stay on `.market`).
 
 식별 → 복약(e약은요) → 제품허가 → 약가 순으로 채우되, **이미 값이 있는 키는 덮어쓰지
 않습니다.** 같은 의미 필드가 여러 API에 있으면 먼저 들어온 값이 유지됩니다.
+`with_market=True` 면 유통 상태 스칼라(`is_marketed` `has_record` `latest_year`
+`latest_amount` `market_part` `is_suspended`)도 같은 dict 에 붙습니다
+(원본 리스트는 `.market` 로 접근).
 
 > Endpoint version numbers (`…Service03`, `…DtlInq06`, `…Service1.2`) may change.
 > Override via constructor args or `KDRUG_*_ENDPOINT` env vars.

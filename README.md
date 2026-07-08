@@ -217,7 +217,7 @@ result.errors        # {'permit': '...'} 처럼 실패한 API만 기록
 info = result.info   # 병합된 DrugInfo
 ```
 
-`info` 안에는 4개 출처가 각각 들어 있습니다(없으면 `None`):
+`info` 안에는 출처별 원본이 각각 들어 있습니다(없으면 `None`):
 
 ```python
 info.item_name       # 대표 제품명
@@ -251,6 +251,12 @@ if info.cost:
     info.cost.max_price           # 상한가 (Decimal, 원)
     info.cost.pay_type            # 급여/비급여
     info.cost.spc_gnl_type        # 전문/일반
+
+# 🟥🟪 유통 상태 — with_market=True 로 조회했을 때만 채워짐
+if info.market:
+    info.market.is_marketed       # 실제 유통 중인가 (실적 있음 + 중단 없음)
+    info.market.latest_year       # 최근 실적 연도
+    info.market.suspend_reports   # 중단 보고 원본 리스트
 ```
 
 ### 하나의 dict 로 평탄화
@@ -266,6 +272,10 @@ info.to_dict()
 #  'max_price': '688', 'pay_type': '급여',
 #  'sources': ['grn', 'product', 'cost'], ...}
 ```
+
+`with_market=True` 로 조회했다면 유통 상태 필드(`is_marketed` `has_record`
+`latest_year` `latest_amount` `market_part` `is_suspended`)도 같은 dict 에
+평탄화됩니다 — [유통 상태 확인](#유통-상태-확인) 참조.
 
 > 비급여/일반의약품(OTC)은 보험 약가가 없어 `info.cost` 가 비어 있을 수 있습니다.
 > 정상입니다.

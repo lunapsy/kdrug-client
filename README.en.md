@@ -202,7 +202,7 @@ result.errors        # {'permit': '...'} — only failed APIs
 info = result.info   # the merged DrugInfo
 ```
 
-`info` holds the four sources (each `None` if absent):
+`info` holds the raw source objects (each `None` if absent):
 ```python
 info.item_name       # representative product name
 info.sources         # ['grn', 'permit', 'product', 'cost'] — sources actually received
@@ -221,6 +221,9 @@ if info.product:     # 🟧 product permit detail
 
 if info.cost:        # 🟨 price (HIRA)
     info.cost.max_price, info.cost.pay_type, info.cost.spc_gnl_type
+
+if info.market:      # 🟥🟪 market status — only with_market=True
+    info.market.is_marketed, info.market.latest_year, info.market.suspend_reports
 ```
 
 ### Flatten to a single dict
@@ -231,6 +234,10 @@ info.to_dict()
 #  'max_price': '688', 'pay_type': '급여',
 #  'sources': ['grn', 'product', 'cost'], ...}
 ```
+
+With `with_market=True`, the market fields (`is_marketed` `has_record`
+`latest_year` `latest_amount` `market_part` `is_suspended`) join the same
+flattened dict — see [Market status](#market-status).
 
 > OTC / non-reimbursed drugs have no NHI price, so `info.cost` may be empty. That's normal.
 
