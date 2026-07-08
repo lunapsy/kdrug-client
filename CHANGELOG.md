@@ -2,6 +2,12 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.3.2] - 2026-07-08
+
+### Docs
+- 대표 예시(한/영)에 `with_market=True` + `info.market.is_marketed` 라인 추가 —
+  6종 전체 흐름을 첫 예시에서 보여준다. 코드 변경 없음.
+
 ## [0.3.1] - 2026-07-08
 
 ### Docs
