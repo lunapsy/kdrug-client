@@ -130,7 +130,7 @@ class KdrugClient:
     production_endpoint: str = DEFAULT_PRODUCTION_ENDPOINT
     timeout: float = DEFAULT_TIMEOUT
     retries: int = DEFAULT_RETRIES
-    user_agent: str = "kdrug-client/0.2 (+https://github.com/lunapsy/kdrug-client)"
+    user_agent: str = "kdrug-client/0.3 (+https://github.com/lunapsy/kdrug-client)"
 
     def __post_init__(self) -> None:
         if not (self.api_key or "").strip():
@@ -312,7 +312,7 @@ class KdrugClient:
         """생산·수입실적 → ProductionRecord 리스트."""
         return [parse_production(r) for r in self.fetch_production_raw(**kwargs)]
 
-    # ── 최상위: 4종 통합 ──────────────────────────────────────────────
+    # ── 최상위: 통합 조회 ──────────────────────────────────────────────
 
     def get_drug_info(self, *, item_seq: Optional[str] = None,
                       item_name: Optional[str] = None,

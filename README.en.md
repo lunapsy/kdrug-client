@@ -176,19 +176,25 @@ Partial name matches work; if several match, the first is used.
 >     print(h.item_seq, h.item_name)
 > ```
 
-### Calling only some of the four APIs
+### Calling only some of the six APIs
 ```python
 pills    = client.fetch_grn(item_name="타이레놀")     # pill identification
 guides   = client.fetch_permit(item_seq="202106092")  # e약은요
 products = client.fetch_product(item_seq="202106092") # product permit detail
 costs    = client.fetch_cost(mds_cd="073400330")      # price (by insurance code)
 costs    = client.fetch_cost(item_name="리피토정20밀리그램")
+reports  = client.fetch_supply(entp_name="한미약품")    # suspension reports
+records  = client.fetch_production(year="2024", part="수입")  # yearly records
 ```
 Each returns a **list** (a search may return several rows).
 
-### Turning off the price lookup
+### Toggling sources in the merged lookup
+
+Drop the price lookup with `with_cost=False`; add market status
+(records + suspensions) with `with_market=True`:
 ```python
 result = client.get_drug_info(item_seq="202106092", with_cost=False)
+result = client.get_drug_info(item_seq="202106092", with_market=True)
 ```
 
 ---
@@ -437,7 +443,7 @@ Approval can take minutes to hours to propagate to your key. Meanwhile the
 approved APIs still return data.
 
 **Q. For some drugs, e약은요 (or another source) is empty.**
-**That's not a bug.** Each of the four APIs covers a different set of drugs.
+**That's not a bug.** Each of the six APIs covers a different set of drugs.
 e약은요, for example, mostly covers common drugs, so some prescription drugs
 (e.g. Lipitor) may have an empty `info.permit`. In that case `result.errors` is
 empty (it isn't an error) and the other sources are merged normally. Check

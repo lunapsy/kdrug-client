@@ -9,7 +9,7 @@
 - DrugCost         : 약가기준(심평원) — 상한가/급여구분/주성분코드
 - SupplyReport     : 생산수입공급중단 보고 — 최종공급일/중단사유/자사재고량
 - ProductionRecord : 생산·수입실적 — 연도별 생산/수입 금액
-- DrugInfo         : 위 4종(식별·e약은요·허가·약가)을 병합한 통합 뷰
+- DrugInfo         : 식별·e약은요·허가·약가(+선택적 유통 상태)를 병합한 통합 뷰
 - MarketStatus     : 실적+공급중단을 결합한 유통 상태 요약 (is_marketed)
 """
 
@@ -311,7 +311,7 @@ class MarketStatus:
 
 @dataclass
 class DrugInfo:
-    """4종 API 결과를 병합한 통합 의약품 정보.
+    """여러 API 결과를 병합한 통합 의약품 정보.
 
     ``sources`` 에는 실제로 데이터가 들어온 API 이름이 담긴다
     (예: ["grn", "permit", "product", "cost", "market"]). 각 원본 dataclass 는

@@ -2,6 +2,16 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.3.1] - 2026-07-08
+
+### Docs
+- README 한/영 전면 정합성 검토 — "4개 중 일부만 호출" → 6개로 갱신하고
+  `fetch_supply`/`fetch_production` 예시 추가, "약가 조회 끄기" →
+  "통합 조회에서 소스 켜고 끄기"(`with_cost`/`with_market`)로 재작성,
+  FAQ의 "four APIs" → six 갱신.
+- CLI/모델 docstring 의 3종·4종 표기 정리, User-Agent 0.3 으로 갱신.
+  코드 동작 변경 없음.
+
 ## [0.3.0] - 2026-07-08
 
 ### Added — 공급중단·생산수입실적 2종 소스 + 유통 상태 판별

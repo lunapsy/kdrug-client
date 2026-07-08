@@ -28,7 +28,7 @@ from .exceptions import KdrugAuthError, KdrugError
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="kdrug",
-        description="공공데이터포털 의약품 3종 API 통합 조회 (낱알식별·허가정보·약가기준)",
+        description="공공데이터포털 의약품 6종 API 통합 조회 (낱알식별·e약은요·제품허가·약가·공급중단·생산수입실적)",
     )
     g = parser.add_mutually_exclusive_group(required=True)
     g.add_argument("--item-seq", help="품목기준코드 (예: 202106092)")

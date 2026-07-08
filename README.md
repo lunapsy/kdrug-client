@@ -178,7 +178,7 @@ result = client.get_drug_info(item_name="리피토정20밀리그램")
 >     print(h.item_seq, h.item_name)
 > ```
 
-### 4개 중 일부만 호출하고 싶을 때
+### 6개 중 일부만 호출하고 싶을 때
 
 ```python
 # 낱알식별만 (모양·색·치수)
@@ -193,14 +193,22 @@ products = client.fetch_product(item_seq="202106092")
 # 약가만 (상한가) — 보험코드(mds_cd)나 제품명으로
 costs = client.fetch_cost(mds_cd="073400330")
 costs = client.fetch_cost(item_name="리피토정20밀리그램")
+
+# 공급중단 보고만 (품목명/업체명 — item_seq 검색은 미지원)
+reports = client.fetch_supply(entp_name="한미약품")
+
+# 생산·수입실적만 (품목명/업체명/연도/구분)
+records = client.fetch_production(year="2024", part="수입")
 ```
 각 메서드는 **리스트**를 돌려줍니다(검색 결과가 여러 건일 수 있으므로).
 
-### 약가 조회 끄기
+### 통합 조회에서 소스 켜고 끄기
 
-약가(심평원)를 빼고 식약처 3종만 쓰려면:
+약가(심평원)를 빼려면 `with_cost=False`, 유통 상태(실적+공급중단)를
+포함하려면 `with_market=True`:
 ```python
 result = client.get_drug_info(item_seq="202106092", with_cost=False)
+result = client.get_drug_info(item_seq="202106092", with_market=True)
 ```
 
 ---

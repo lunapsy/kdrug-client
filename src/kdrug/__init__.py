@@ -49,7 +49,7 @@ from .parsers import (
 )
 from ._env import load_dotenv, create_env_file, find_dotenv
 
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 __all__ = [
     "KdrugClient",
