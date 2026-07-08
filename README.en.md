@@ -13,12 +13,13 @@ the MFDS + one drug-price API from HIRA) with **a single call**.
 from kdrug import KdrugClient
 
 client = KdrugClient.from_env()
-info = client.get_drug_info(item_name="타이레놀정500밀리그람").info
+info = client.get_drug_info(item_name="타이레놀정500밀리그람", with_market=True).info
 
 print(info.product.main_ingredient)   # acetaminophen
 print(info.identity.drug_shape)       # shape
 print(info.permit.efficacy)           # patient-friendly indications
 print(info.cost.max_price)            # ceiling price (if reimbursed)
+print(info.market.is_marketed)        # actually on the market? (with_market=True)
 ```
 
 Instead of calling six separate government APIs and reconciling their different

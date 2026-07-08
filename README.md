@@ -13,12 +13,13 @@
 from kdrug import KdrugClient
 
 client = KdrugClient.from_env()
-info = client.get_drug_info(item_name="타이레놀정500밀리그람").info
+info = client.get_drug_info(item_name="타이레놀정500밀리그람", with_market=True).info
 
 print(info.product.main_ingredient)   # 아세트아미노펜
 print(info.identity.drug_shape)       # 장방형 (모양)
 print(info.permit.efficacy)           # 이 약은 발열 및 통증에...
 print(info.cost.max_price)            # 상한가 (급여 의약품인 경우)
+print(info.market.is_marketed)        # 실제 유통 중인가 (with_market=True)
 ```
 
 원래는 흩어진 6개의 정부 API를 각각 호출하고, 서로 다른 응답 형식을 일일이
