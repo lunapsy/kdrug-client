@@ -1,11 +1,14 @@
-"""KdrugClient — 공공데이터포털 의약품 3종 OpenAPI 통합 클라이언트.
+"""KdrugClient — 공공데이터포털 의약품 6종 OpenAPI 통합 클라이언트.
 
-엔드포인트 (data.go.kr / 식품의약품안전처 1471000, 2026-06 현행):
-  - 낱알식별   MdcinGrnIdntfcInfoService03/getMdcinGrnIdntfcInfoList03
-  - 허가정보   DrbEasyDrugInfoService/getDrbEasyDrugList (e약은요)
-  - 제품허가   DrugPrdtPrmsnInfoService07/getDrugPrdtPrmsnInq07
+엔드포인트 (data.go.kr, 2026-07 현행):
+  - 낱알식별     MdcinGrnIdntfcInfoService03/getMdcinGrnIdntfcInfoList03
+  - 허가정보     DrbEasyDrugInfoService/getDrbEasyDrugList (e약은요)
+  - 제품허가     DrugPrdtPrmsnInfoService07/getDrugPrdtPrmsnDtlInq06
+  - 약가기준     dgamtCrtrInfoService1.2/getDgamtList (심평원 B551182)
+  - 공급중단     MdcinPrdctnIncmeSuplyService2/getMdcinPrdctnIncmeSuplyList
+  - 생산·수입실적 MdcinPrdctnImportAcmsltService02/getMdcinPrdctnImportrstList02
 
-세 API의 공통 조인 키는 ``ITEM_SEQ`` (품목기준코드).
+식약처 API 의 공통 조인 키는 ``ITEM_SEQ`` (품목기준코드).
 표준 라이브러리(urllib)만 사용 — 외부 의존성 없음.
 
 기본 사용::
@@ -13,12 +16,12 @@
     from kdrug import KdrugClient
 
     client = KdrugClient(api_key="...")          # 또는 KdrugClient.from_env()
-    info = client.get_drug_info(item_seq="199104100")
+    info = client.get_drug_info(item_seq="202106092")
     print(info.item_name, info.price.max_price)
 
 저수준(원본 dict)도 가능::
 
-    rows = client.fetch_grn_raw(item_seq="199104100")
+    rows = client.fetch_grn_raw(item_seq="202106092")
 """
 
 from __future__ import annotations
@@ -34,8 +37,14 @@ from dataclasses import dataclass, field
 from typing import Any, Optional
 
 from .exceptions import KdrugAuthError, KdrugHTTPError, KdrugResponseError
-from .models import DrugCost, DrugInfo, DrugPermit, DrugProduct, PillIdentity
-from .parsers import parse_cost, parse_grn, parse_permit, parse_product
+from .models import (
+    DrugCost, DrugInfo, DrugPermit, DrugProduct, MarketStatus,
+    PillIdentity, ProductionRecord, SupplyReport,
+)
+from .parsers import (
+    parse_cost, parse_grn, parse_permit, parse_product,
+    parse_production, parse_supply,
+)
 
 logger = logging.getLogger("kdrug")
 
@@ -67,6 +76,20 @@ DEFAULT_COST_ENDPOINT = (
     "https://apis.data.go.kr/B551182/"
     "dgamtCrtrInfoService1.2/getDgamtList"
 )
+# 생산수입공급중단(getMdcinPrdctnIncmeSuplyList) — 중단 보고: 최종공급일·중단사유·재고.
+#   ⚠️ item_seq 요청 파라미터가 없다. itemName/entpName 검색 후 ITEM_SEQ 매칭.
+DEFAULT_SUPPLY_ENDPOINT = (
+    "https://apis.data.go.kr/1471000/"
+    "MdcinPrdctnIncmeSuplyService2/getMdcinPrdctnIncmeSuplyList"
+)
+# 생산·수입실적(getMdcinPrdctnImportrstList02) — 연도별 생산/수입 금액.
+#   ⚠️ item_seq 파라미터가 무시된다(라이브 확인). item_name 검색 후 ITEM_SEQ 매칭.
+#   ⚠️ 응답 items 가 [{"item": {...}}] 로 한 겹 중첩 — _extract_items 가 흡수.
+#   금액 단위: 생산=백만원, 수입=달러(USD).
+DEFAULT_PRODUCTION_ENDPOINT = (
+    "https://apis.data.go.kr/1471000/"
+    "MdcinPrdctnImportAcmsltService02/getMdcinPrdctnImportrstList02"
+)
 
 ENV_API_KEY = "KDRUG_API_KEY"
 # rxstock/Edge Function 호환 — 인코딩/디코딩 키를 구분해 받는 환경변수도 인식.
@@ -82,14 +105,15 @@ SUCCESS_CODES = {"00", "0"}
 
 @dataclass
 class KdrugClient:
-    """의약품 4종 API 래퍼 (낱알식별·e약은요·제품허가·약가).
+    """의약품 6종 API 래퍼 (낱알식별·e약은요·제품허가·약가·공급중단·생산수입실적).
 
     Args:
         api_key: 공공데이터포털 인증키 (Decoding 또는 Encoding).
         key_is_encoded: 키가 이미 URL 인코딩된 Encoding 키인지 여부.
             None(기본)이면 키에 '%' 가 있으면 Encoding 으로 자동 판별.
             Encoding 키는 그대로 삽입(이중 인코딩 방지), Decoding 키는 인코딩해 삽입.
-        grn_endpoint / permit_endpoint / product_endpoint / cost_endpoint:
+        grn_endpoint / permit_endpoint / product_endpoint / cost_endpoint /
+        supply_endpoint / production_endpoint:
             주소 오버라이드(선택).
         timeout: 요청 타임아웃(초).
         retries: 네트워크 오류 시 추가 재시도 횟수.
@@ -102,6 +126,8 @@ class KdrugClient:
     permit_endpoint: str = DEFAULT_PERMIT_ENDPOINT
     product_endpoint: str = DEFAULT_PRODUCT_ENDPOINT
     cost_endpoint: str = DEFAULT_COST_ENDPOINT
+    supply_endpoint: str = DEFAULT_SUPPLY_ENDPOINT
+    production_endpoint: str = DEFAULT_PRODUCTION_ENDPOINT
     timeout: float = DEFAULT_TIMEOUT
     retries: int = DEFAULT_RETRIES
     user_agent: str = "kdrug-client/0.2 (+https://github.com/lunapsy/kdrug-client)"
@@ -158,6 +184,8 @@ class KdrugClient:
             ("KDRUG_PERMIT_ENDPOINT", "permit_endpoint"),
             ("KDRUG_PRODUCT_ENDPOINT", "product_endpoint"),
             ("KDRUG_COST_ENDPOINT", "cost_endpoint"),
+            ("KDRUG_SUPPLY_ENDPOINT", "supply_endpoint"),
+            ("KDRUG_PRODUCTION_ENDPOINT", "production_endpoint"),
         ):
             val = (os.environ.get(env_name) or "").strip()
             if val:
@@ -219,6 +247,45 @@ class KdrugClient:
             raise ValueError("fetch_cost requires mds_cd, item_name, or manufacturer.")
         return self._fetch(self.cost_endpoint, params, "cost", service_key_param="ServiceKey")
 
+    def fetch_supply_raw(self, *, item_name: Optional[str] = None,
+                         entp_name: Optional[str] = None, rows: int = 10,
+                         page: int = 1) -> list[dict[str, Any]]:
+        """생산수입공급중단 — 원본 row dict 리스트.
+
+        getMdcinPrdctnIncmeSuplyList 공식 스펙상 요청 파라미터는 camelCase
+        itemName / entpName. **item_seq 파라미터가 없다** — 특정 품목은 품목명으로
+        검색한 뒤 응답의 ITEM_SEQ 로 매칭할 것. 조건 없이 호출하면 전체 목록.
+        """
+        params: dict[str, Any] = {"numOfRows": rows, "pageNo": page, "type": "json"}
+        if item_name:
+            params["itemName"] = item_name
+        if entp_name:
+            params["entpName"] = entp_name
+        return self._fetch(self.supply_endpoint, params, "supply")
+
+    def fetch_production_raw(self, *, item_name: Optional[str] = None,
+                             entp_name: Optional[str] = None,
+                             year: Optional[str] = None,
+                             part: Optional[str] = None, rows: int = 10,
+                             page: int = 1) -> list[dict[str, Any]]:
+        """생산·수입실적 — 원본 row dict 리스트.
+
+        getMdcinPrdctnImportrstList02 공식 스펙상 요청 파라미터는 소문자
+        item_name / entp_name / date_year / result_part. **item_seq 는 보내도
+        무시된다**(라이브 확인) — 품목명 검색 후 ITEM_SEQ 매칭할 것.
+        응답 items 의 [{"item": {...}}] 중첩은 _extract_items 가 풀어준다.
+        """
+        params: dict[str, Any] = {"numOfRows": rows, "pageNo": page, "type": "json"}
+        if item_name:
+            params["item_name"] = item_name
+        if entp_name:
+            params["entp_name"] = entp_name
+        if year:
+            params["date_year"] = str(year)
+        if part:
+            params["result_part"] = part
+        return self._fetch(self.production_endpoint, params, "production")
+
     # ── 고수준: 정규화된 dataclass ────────────────────────────────────
 
     def fetch_grn(self, **kwargs: Any) -> list[PillIdentity]:
@@ -236,6 +303,14 @@ class KdrugClient:
     def fetch_cost(self, **kwargs: Any) -> list[DrugCost]:
         """약가기준(심평원) → DrugCost 리스트."""
         return [parse_cost(r) for r in self.fetch_cost_raw(**kwargs)]
+
+    def fetch_supply(self, **kwargs: Any) -> list[SupplyReport]:
+        """생산수입공급중단 → SupplyReport 리스트."""
+        return [parse_supply(r) for r in self.fetch_supply_raw(**kwargs)]
+
+    def fetch_production(self, **kwargs: Any) -> list[ProductionRecord]:
+        """생산·수입실적 → ProductionRecord 리스트."""
+        return [parse_production(r) for r in self.fetch_production_raw(**kwargs)]
 
     # ── 최상위: 4종 통합 ──────────────────────────────────────────────
 
@@ -305,6 +380,98 @@ class KdrugClient:
             cost=cost,
         )
         return DrugInfoResult(info=info, errors=errors)
+
+    # ── 최상위: 유통 상태 (공급중단 + 생산·수입실적 결합) ─────────────
+
+    def get_market_status(self, *, item_seq: Optional[str] = None,
+                          item_name: Optional[str] = None,
+                          rows: int = 50,
+                          strict: bool = False) -> "MarketStatusResult":
+        """공급중단·생산수입실적 2종을 결합해 유통 상태(``MarketStatus``)로 병합.
+
+        "허가는 있는데 실제로 시장에 공급되고 있는가?"에 답한다. 주문/발주 연동 시
+        **허가만 받고 생산·수입하지 않는 품목**을 걸러내는 용도.
+
+        두 API 모두 item_seq 검색이 안 되므로 품목명으로 검색한 뒤 응답의
+        ITEM_SEQ 로 매칭한다. item_seq 만 주어지면 제품허가 상세에서 품목명을
+        먼저 해석한다(API 1회 추가).
+
+        ⚠️ 허가가 취하된 품목은 제품허가 API에서 조회되지 않는다. 이런 품목은
+        item_name 을 함께 넘겨야 조회된다(공급중단 품목일수록 흔한 케이스).
+
+        Args:
+            item_seq: 품목기준코드. 응답 매칭 기준.
+            item_name: 품목명. 검색 키 (없으면 제품허가에서 해석).
+            rows: 이름 검색 범위 (동명 품목 대비, 기본 50).
+            strict: True 면 일부 API 실패 시 예외. False(기본)면 errors 에 수집.
+
+        Returns:
+            MarketStatusResult — ``.status`` (MarketStatus) 와 ``.errors`` (dict).
+        """
+        if not item_seq and not item_name:
+            raise ValueError("get_market_status requires item_seq or item_name.")
+
+        errors: dict[str, str] = {}
+
+        # 품목명 해석 (item_seq 만 있을 때 — 제품허가 상세는 item_seq 정확 조회 가능)
+        if not item_name:
+            product = self._safe_one(
+                self.fetch_product, "product", errors, strict, item_seq=item_seq)
+            item_name = getattr(product, "item_name", "") if product else ""
+            if not item_name:
+                errors.setdefault(
+                    "resolve",
+                    "품목명 해석 실패 — 허가취하 품목일 수 있음. item_name 을 직접 전달하세요.")
+                return MarketStatusResult(
+                    status=MarketStatus(item_seq=item_seq or ""), errors=errors)
+
+        def _match(rows_: list[Any]) -> list[Any]:
+            """item_seq 가 주어졌으면 정확 매칭, 아니면 품목명 그대로."""
+            if not item_seq:
+                return rows_
+            return [r for r in rows_ if r.item_seq == item_seq]
+
+        records: list[ProductionRecord] = []
+        try:
+            records = _match(self.fetch_production(item_name=item_name, rows=rows))
+        except (KdrugHTTPError, KdrugResponseError) as e:
+            if strict:
+                raise
+            errors["production"] = f"{type(e).__name__}: {e}"
+            logger.warning("kdrug production failed: %s", e)
+
+        reports: list[SupplyReport] = []
+        try:
+            reports = _match(self.fetch_supply(item_name=item_name, rows=rows))
+        except (KdrugHTTPError, KdrugResponseError) as e:
+            if strict:
+                raise
+            errors["supply"] = f"{type(e).__name__}: {e}"
+            logger.warning("kdrug supply failed: %s", e)
+
+        # 최근 연도 실적 집계 (같은 연도 복수 레코드는 합산)
+        latest_year = ""
+        latest_amount = None
+        part = ""
+        if records:
+            latest_year = max(r.year for r in records)
+            latest = [r for r in records if r.year == latest_year]
+            amounts = [r.amount for r in latest if r.amount is not None]
+            latest_amount = sum(amounts) if amounts else None
+            part = latest[0].part
+
+        status = MarketStatus(
+            item_seq=item_seq or (records[0].item_seq if records else ""),
+            item_name=item_name,
+            has_record=bool(records),
+            latest_year=latest_year,
+            latest_amount=latest_amount,
+            part=part,
+            records=records,
+            is_suspended=any(r.is_suspended for r in reports),
+            suspend_reports=reports,
+        )
+        return MarketStatusResult(status=status, errors=errors)
 
     # ── 내부 helper ───────────────────────────────────────────────────
 
@@ -404,6 +571,22 @@ class DrugInfoResult:
         return self.ok
 
 
+@dataclass
+class MarketStatusResult:
+    """get_market_status 반환 — 유통 상태 + API별 오류."""
+
+    status: MarketStatus
+    errors: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def ok(self) -> bool:
+        """실적 또는 공급중단 보고 중 하나라도 확인됐으면 True."""
+        return self.status.has_record or bool(self.status.suspend_reports)
+
+    def __bool__(self) -> bool:
+        return self.ok
+
+
 def _extract_items(payload: dict[str, Any], label: str) -> list[dict[str, Any]]:
     """공공데이터포털 공통 응답에서 items 리스트만 추출.
 
@@ -426,7 +609,11 @@ def _extract_items(payload: dict[str, Any], label: str) -> list[dict[str, Any]]:
     if items is None:
         return []
     if isinstance(items, list):
-        return items
+        # 생산·수입실적처럼 [{"item": {...}}, ...] 로 한 겹 싸여 오는 경우 흡수
+        return [
+            r["item"] if isinstance(r, dict) and set(r.keys()) == {"item"} else r
+            for r in items
+        ]
     if isinstance(items, dict):
         inner = items.get("item")
         if inner is None:
@@ -435,4 +622,4 @@ def _extract_items(payload: dict[str, Any], label: str) -> list[dict[str, Any]]:
     return []
 
 
-__all__ = ["KdrugClient", "DrugInfoResult"]
+__all__ = ["KdrugClient", "DrugInfoResult", "MarketStatusResult"]

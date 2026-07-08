@@ -13,7 +13,7 @@ def main() -> None:
     client = KdrugClient.from_env()
     # 또는 직접: client = KdrugClient(api_key="...")
 
-    item_seq = "199104100"  # 예시 품목기준코드
+    item_seq = "202106092"  # 예시 품목기준코드
 
     # 2) 3종 API를 한 번에 — 일부 실패해도 받은 데이터만 병합
     result = client.get_drug_info(item_seq=item_seq)

@@ -2,11 +2,11 @@
 
 [English](#field-reference--필드-레퍼런스) · [한국어](#한국어)
 
-Complete column list for every dataclass. The common join key for the three
-MFDS services is `ITEM_SEQ` (item serial code); the HIRA price service has no
+Complete column list for every dataclass. The common join key for the MFDS
+services is `ITEM_SEQ` (item serial code); the HIRA price service has no
 `ITEM_SEQ` and joins via `mds_cd` (= product permit `EDI_CODE`, the insurance code).
 
-모든 dataclass의 전체 컬럼입니다. 식약처 3종의 공통 조인 키는 `ITEM_SEQ`(품목기준코드),
+모든 dataclass의 전체 컬럼입니다. 식약처 API의 공통 조인 키는 `ITEM_SEQ`(품목기준코드),
 심평원 약가는 `ITEM_SEQ`가 없어 `mds_cd`(= 제품허가 `EDI_CODE` 보험코드)로 조인합니다.
 
 ---
@@ -131,6 +131,84 @@ query by `mds_cd` (insurance code) or product name. Non-reimbursed items have no
 
 ---
 
+## 🟥 SupplyReport — 생산수입공급중단 / Supply suspension report
+`MdcinPrdctnIncmeSuplyService2 / getMdcinPrdctnIncmeSuplyList` — 21 fields
+
+| field | API key | 설명 (KR) | description (EN) |
+|-------|---------|-----------|------------------|
+| `item_seq` | `ITEM_SEQ` | 품목기준코드 (조인 키) | item serial code (join key) |
+| `item_name` | `ITEM_NAME` | 품목명 | product name |
+| `edi_code` | `EDI_CODE` | 표준코드 | standard (EDI) code |
+| `entp_name` | `ENTP_NAME` | 업체명 | company name |
+| `entp_seq` | `ENTP_SEQ` | 업 일련번호 | company serial no. |
+| `bizrno` | `BIZRNO` | 사업자등록번호 | business registration no. |
+| `report_flag` | `SUSPEND_REPORT_FLAG` | 보고구분 (생산/수입/공급) | report type (production/import/supply) |
+| `report_seq` | `SUSPEND_REPORT_SEQ` | 보고번호 | report number |
+| `report_progress` | `REPORT_PGS_CODE` | 진행단계 (신청중/처리완료/취하 등) | processing stage |
+| `supply_yn` | `SUPPLY_YN` | 보고구분_공급 (Y/N) | supply-type flag (Y/N) |
+| `last_supply_date` | `LAST_SUPPLY_DATE` | 최종공급일자 (YYYYMMDD) | last supply date |
+| `suspend_date` | `SUSPEND_DATE` | 공급중단일자 (YYYYMMDD) | suspension date |
+| `suspend_flag` | `SUSPEND_FLAG` | 중단구분 (1:공급 / 2:공급중단) | suspension flag (1: supply / 2: suspended) |
+| `inventory_date` | `INV_DATE` | 재고기준일자 | inventory reference date |
+| `inventory_qty` | `INV_QTY` | 자사재고량 | remaining company inventory |
+| `suspend_reason` | `SUSPEND_REASON` | 중단사유 | reason for suspension |
+| `shortage_risk` | `SUPPLY_LACK_PACI` | 공급부족가능성 | shortage-risk assessment |
+| `supply_plan` | `SUPPLY_PLAN` | 공급원활 추진계획 | supply continuity plan |
+| `report_date` | `REPORT_DATE` | 보고일자 | report filing date |
+| `processed_date` | `EXAM_RESULT_TIME` | 처리일자 | processed date |
+| `address` | `REPORT_ADDR` | 업체소재지 | company address |
+| `is_suspended` | (derived) | 공급중단 여부 (`suspend_flag == "2"`) | suspended? (derived) |
+
+> ⚠️ 이 API에는 `item_seq` 요청 파라미터가 없습니다 — `itemName`/`entpName` 검색 후
+> 응답의 `ITEM_SEQ` 로 매칭하세요. `get_market_status()` 가 이를 대신해 줍니다.
+>
+> ⚠️ This API has no `item_seq` request parameter — search by `itemName`/`entpName`
+> and match the response's `ITEM_SEQ`. `get_market_status()` does this for you.
+
+---
+
+## 🟪 ProductionRecord — 생산·수입실적 / Production & import record
+`MdcinPrdctnImportAcmsltService02 / getMdcinPrdctnImportrstList02` — 8 fields
+
+| field | API key | 설명 (KR) | description (EN) |
+|-------|---------|-----------|------------------|
+| `item_seq` | `ITEM_SEQ` | 품목기준코드 (조인 키) | item serial code (join key) |
+| `item_name` | `ITEM_NAME` | 품목명 | product name |
+| `entp_name` | `ENTP_NAME` | 업체명 | company name |
+| `entp_seq` | `ENTP_SEQ` | 업 일련번호 | company serial no. |
+| `bizrno` | `BIZRNO` | 사업자등록번호 | business registration no. |
+| `year` | `DATE_YEAR` | 집계년도 | statistics year |
+| `part` | `RESULT_PART` | 생산·수입 구분 ("생산"/"수입") | record type (production/import) |
+| `amount` | `AMT` | 실적금액 — 생산:백만원 / 수입:달러 | amount — production: million KRW / import: USD |
+| `is_production` | (derived) | 생산 실적 여부 | production record? (derived) |
+| `is_import` | (derived) | 수입 실적 여부 | import record? (derived) |
+| `amount_krw` | (derived) | 생산 금액 원화 환산 (수입은 None) | KRW conversion (None for imports) |
+
+> ⚠️ 금액 단위: **생산 = 백만원, 수입 = 달러(USD)**. 같은 품목이 한 연도에 복수
+> 레코드(포장단위별)로 나올 수 있습니다. `item_seq` 파라미터는 무시됩니다(라이브 확인).
+>
+> ⚠️ Units: **production = million KRW, import = USD**. The same item may have
+> multiple records per year. The `item_seq` parameter is silently ignored (verified live).
+
+---
+
+## MarketStatus — 유통 상태 / Market status
+`get_market_status()` 가 위 2종을 결합해 만드는 요약 모델 — 9 fields
+
+| field | source | 설명 (KR) | description (EN) |
+|-------|--------|-----------|------------------|
+| `item_seq` / `item_name` | — | 품목 식별 | item identity |
+| `has_record` | ProductionRecord | 실적 존재 여부 | any record exists |
+| `latest_year` | ProductionRecord | 최근 실적 연도 | latest record year |
+| `latest_amount` | ProductionRecord | 최근 연도 합계 (단위: `part`) | sum for that year (unit follows `part`) |
+| `part` | ProductionRecord | 최근 실적 구분 | latest record type |
+| `records` | ProductionRecord | 원본 리스트 | raw list |
+| `is_suspended` | SupplyReport | 중단 보고 존재 여부 | any suspension report |
+| `suspend_reports` | SupplyReport | 원본 리스트 | raw list |
+| `is_marketed` | (derived) | `has_record and not is_suspended` | actually on the market? |
+
+---
+
 ## Merge order / 병합 규칙 — `DrugInfo.to_dict()`
 
 Filled in order **identity → permit → product → cost**; existing non-empty values
@@ -151,5 +229,6 @@ earliest one wins.
 ## 한국어
 
 위 표가 한국어 설명을 포함합니다(`설명 (KR)` 열). 한국어로만 보고 싶으면 각 표의
-`field` · `API key` · `설명 (KR)` 열을 참고하세요. 전체 77개 컬럼:
-PillIdentity 23 · DrugPermit 13 · DrugProduct 28 · DrugCost 13.
+`field` · `API key` · `설명 (KR)` 열을 참고하세요. 전체 107개 컬럼:
+PillIdentity 23 · DrugPermit 13 · DrugProduct 28 · DrugCost 13 ·
+SupplyReport 21 · ProductionRecord 8 · MarketStatus 9 (파생 속성 별도).

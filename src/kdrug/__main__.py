@@ -3,13 +3,14 @@
 사용::
 
     export KDRUG_API_KEY="발급받은_Decoding_키"
-    python -m kdrug --item-seq 199104100
+    python -m kdrug --item-seq 202106092
     python -m kdrug --item-name 타이레놀 --json
-    kdrug --item-seq 199104100            # 설치 후 콘솔 스크립트
+    kdrug --item-seq 202106092            # 설치 후 콘솔 스크립트
 
 옵션:
     --item-seq SEQ     품목기준코드로 조회 (권장)
     --item-name NAME   제품명으로 조회
+    --market           유통 상태(생산·수입실적 + 공급중단)도 함께 조회
     --json             원본 병합 dict 를 JSON 으로 출력
     --api-key KEY      환경변수 대신 직접 키 지정
 """
@@ -30,11 +31,13 @@ def main(argv: list[str] | None = None) -> int:
         description="공공데이터포털 의약품 3종 API 통합 조회 (낱알식별·허가정보·약가기준)",
     )
     g = parser.add_mutually_exclusive_group(required=True)
-    g.add_argument("--item-seq", help="품목기준코드 (예: 199104100)")
+    g.add_argument("--item-seq", help="품목기준코드 (예: 202106092)")
     g.add_argument("--item-name", help="제품명 (예: 타이레놀정500밀리그람)")
     g.add_argument("--init", action="store_true",
                    help="현재 폴더에 .env 템플릿을 생성하고 종료")
     parser.add_argument("--api-key", help="인증키 (없으면 KDRUG_API_KEY 환경변수 사용)")
+    parser.add_argument("--market", action="store_true",
+                        help="유통 상태(생산·수입실적 + 공급중단 보고)도 함께 조회")
     parser.add_argument("--json", action="store_true", help="병합 dict 를 JSON 으로 출력")
     args = parser.parse_args(argv)
 
@@ -64,10 +67,23 @@ def main(argv: list[str] | None = None) -> int:
 
     merged = result.info.to_dict()
 
+    market = None
+    if args.market:
+        try:
+            market = client.get_market_status(
+                item_seq=result.info.item_seq or args.item_seq,
+                item_name=result.info.item_name or args.item_name)
+        except KdrugError as e:
+            print(f"유통 상태 조회 실패: {e}", file=sys.stderr)
+
     if args.json:
+        if market is not None:
+            merged["market_status"] = market.status.to_dict()
         print(json.dumps(merged, ensure_ascii=False, indent=2, default=str))
     else:
         _print_human(result)
+        if market is not None:
+            _print_market(market)
     return 0
 
 
@@ -124,6 +140,24 @@ def _print_human(result) -> None:
         print("  ⚠ 일부 API 오류:")
         for api, err in result.errors.items():
             print(f"    [{api}] {err}")
+
+
+def _print_market(result) -> None:
+    s = result.status
+    print("  [유통 상태 — 생산·수입실적 + 공급중단]")
+    mark = "✅ 유통 중" if s.is_marketed else "⛔ 유통 확인 안 됨"
+    print(f"    {mark}  (실적: {'있음' if s.has_record else '없음'} / "
+          f"중단보고: {'있음' if s.is_suspended else '없음'})")
+    if s.has_record:
+        unit = "백만원" if s.part == "생산" else "달러"
+        print(f"    최근 실적: {s.latest_year} {s.part} {s.latest_amount} {unit}")
+    for r in s.suspend_reports:
+        if r.is_suspended:
+            reason = (r.suspend_reason or "-")[:50]
+            print(f"    중단보고: {r.suspend_date} ({r.report_flag}) — {reason}")
+    if result.errors:
+        for api, err in result.errors.items():
+            print(f"    ⚠ [{api}] {err}")
 
 
 if __name__ == "__main__":

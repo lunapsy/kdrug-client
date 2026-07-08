@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/kdrug-client.svg)](https://pypi.org/project/kdrug-client/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-A Python client that queries **four Korean government drug OpenAPIs** (three from
+A Python client that queries **six Korean government drug OpenAPIs** (five from
 the MFDS + one drug-price API from HIRA) with **a single call**.
 
 ```python
@@ -21,7 +21,7 @@ print(info.permit.efficacy)           # patient-friendly indications
 print(info.cost.max_price)            # ceiling price (if reimbursed)
 ```
 
-Instead of calling four separate government APIs and reconciling their different
+Instead of calling six separate government APIs and reconciling their different
 response formats by hand, this library does it for you. (The data is Korean.)
 
 | What | Source API | Information |
@@ -30,10 +30,14 @@ response formats by hand, this library does it for you. (The data is Korean.)
 | 🟩 **Patient info** | e약은요 (easy drug info) | efficacy, usage, precautions, side effects, storage |
 | 🟧 **Permit detail** | Product permit detail | ingredient, ATC, storage, documents, insurance code |
 | 🟨 **Price** | HIRA drug price | NHI ceiling price, reimbursement type, Rx/OTC |
+| 🟥 **Supply disruption** | Supply suspension reports | last supply date, reason, remaining inventory |
+| 🟪 **Market records** | Production/import records | yearly amounts — detects permit-only "ghost" products |
 
 **Highlights**
 - 🪶 **Zero dependencies** — standard library (`urllib`) only.
-- 🔗 **Automatic join** — one item code calls all four APIs and merges into one object.
+- 🔗 **Automatic join** — one item code calls the APIs and merges into one object.
+- 📦 **Market-status check** — `get_market_status()` answers "is this drug actually
+  on the market?" in one call. Built for order-system integration.
 - 🛟 **Partial-failure tolerant** — if one API is blocked (403/error), you still get the rest.
 - 🧩 **Typed** — returns `dataclass`es for IDE autocompletion.
 - 💻 **CLI included** — `kdrug --item-name 타이레놀` in the terminal.
@@ -46,10 +50,11 @@ response formats by hand, this library does it for you. (The data is Korean.)
 3. [Getting an API key](#getting-an-api-key)
 4. [Usage](#usage)
 5. [Working with the result](#working-with-the-result)
-6. [CLI](#cli)
-7. [API reference](#api-reference)
-8. [Error handling](#error-handling)
-9. [FAQ](#faq)
+6. [Market status](#market-status)
+7. [CLI](#cli)
+8. [API reference](#api-reference)
+9. [Error handling](#error-handling)
+10. [FAQ](#faq)
 
 ---
 
@@ -104,19 +109,22 @@ kdrug --item-name 타이레놀정500밀리그람
 ## Getting an API key
 
 > The key is **free** and takes about 5–10 minutes. One account's key works for
-> all four APIs, but you must **request access to each API separately**.
+> all six APIs, but you must **request access to each API separately**.
 
 1. Sign up / log in at the [public data portal](https://www.data.go.kr).
-2. Request access ("활용신청") on each of the four API pages
+2. Request access ("활용신청") on each of the six API pages
    (usually auto-approved within minutes to a few hours):
    - [Pill identification](https://www.data.go.kr/data/15057639/openapi.do)
    - [e약은요 (easy drug info)](https://www.data.go.kr/data/15075057/openapi.do)
    - [Product permit info](https://www.data.go.kr/data/15095677/openapi.do)
    - [HIRA drug price](https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do) (separate agency)
+   - [Supply suspension reports](https://www.data.go.kr/data/15057899/openapi.do) (for market status)
+   - [Production/import records](https://www.data.go.kr/data/15056880/openapi.do) (for market status)
 3. In **My Page → Open API → keys**, copy the **`Decoding` (general service key)**.
 
-> 💡 You don't need all four. If you don't need price, request only the first
-> three — unrequested APIs are simply skipped (partial-failure tolerant).
+> 💡 You don't need all six. Unrequested APIs are simply skipped
+> (partial-failure tolerant). The last two are only needed for
+> `get_market_status()` (market status).
 
 ### Registering the key
 
@@ -227,12 +235,66 @@ info.to_dict()
 
 ---
 
+## Market status
+
+Some products hold a valid permit but are **never actually produced or imported**.
+If you integrate drug data with an ordering system, these dead items cause failed
+orders. `get_market_status()` combines two APIs — production/import records and
+supply-suspension reports — to answer "is this drug actually on the market?":
+
+```python
+result = client.get_market_status(item_seq="202106092")
+s = result.status
+
+s.is_marketed      # True = has production/import records AND no suspension report
+s.has_record       # any production/import record exists (MFDS yearly statistics)
+s.latest_year      # most recent record year — "2024"
+s.latest_amount    # sum for that year (unit depends on s.part — see below)
+s.part             # "생산" (production) or "수입" (import)
+s.is_suspended     # a supply-suspension report exists
+s.suspend_reports  # SupplyReport list — reason, last supply date, inventory
+s.records          # ProductionRecord list — yearly raw records
+```
+
+Typical order-integration flow:
+
+```python
+for seq in my_item_seqs:
+    result = client.get_market_status(item_seq=seq)
+    if not result.status.is_marketed:
+        mark_unorderable(seq)    # permit-only, discontinued, or revoked
+```
+
+The two APIs are also available individually:
+
+```python
+reports = client.fetch_supply(entp_name="한미약품")           # suspension reports
+records = client.fetch_production(year="2024", part="수입")   # yearly records
+```
+
+> **⚠️ Amount units differ by type** — production amounts are in **million KRW**,
+> import amounts are in **USD**. Use `record.amount_krw` for a KRW conversion of
+> production records (`None` for imports — that would need an exchange rate).
+
+> **⚠️ Neither API supports lookup by `item_seq`** (the parameter is silently
+> ignored — verified live). The client searches by product name and matches the
+> response's `ITEM_SEQ` for you. With only `item_seq` given, the product-permit
+> API resolves the name first (one extra call).
+
+> **⚠️ Pass `item_name` for revoked permits** — revoked products disappear from
+> the permit API entirely, so the name cannot be resolved automatically. This is
+> common precisely for discontinued drugs:
+> `client.get_market_status(item_seq=seq, item_name="레나젤정800(세벨라머염산염)")`
+
+---
+
 ## CLI
 
 ```bash
 kdrug --item-seq 200410085        # human-readable summary
 kdrug --item-name 타이레놀         # search by name
 kdrug --item-seq 200410085 --json # JSON output
+kdrug --item-seq 202106092 --market   # include market status
 kdrug --init                      # create a .env template
 ```
 
@@ -249,19 +311,28 @@ If `kdrug` isn't found, use `python3 -m kdrug --item-name 타이레놀`.
 | `KdrugClient(api_key=...)` | — | create with an explicit key |
 | `KdrugClient.from_env()` | `KdrugClient` | create from env / `.env` |
 | `get_drug_info(item_seq=, item_name=, with_cost=True, strict=False)` | `DrugInfoResult` | **4-API merged lookup (recommended)** |
+| `get_market_status(item_seq=, item_name=, rows=50, strict=False)` | `MarketStatusResult` | **market status (records + suspensions)** |
 | `fetch_grn(item_seq=, item_name=, rows=10)` | `list[PillIdentity]` | pill identification |
 | `fetch_permit(...)` | `list[DrugPermit]` | e약은요 |
 | `fetch_product(...)` | `list[DrugProduct]` | product permit detail |
 | `fetch_cost(mds_cd=, item_name=, manufacturer=)` | `list[DrugCost]` | price (HIRA) |
+| `fetch_supply(item_name=, entp_name=)` | `list[SupplyReport]` | suspension reports |
+| `fetch_production(item_name=, entp_name=, year=, part=)` | `list[ProductionRecord]` | production/import records |
 | `fetch_grn_raw(...)` etc. | `list[dict]` | raw, unparsed responses |
 
 Constructor options: `timeout` (default 8s), `retries` (default 2),
-`grn_endpoint`/`permit_endpoint`/`product_endpoint`/`cost_endpoint` overrides, `user_agent`.
+`grn_endpoint`/`permit_endpoint`/`product_endpoint`/`cost_endpoint`/
+`supply_endpoint`/`production_endpoint` overrides, `user_agent`.
 
 ### `DrugInfoResult`
 - `.info` → `DrugInfo` (merged)
 - `.errors` → `{api_name: error_msg}` (failed APIs only)
 - `.ok` / `bool(result)` → received data from at least one API
+
+### `MarketStatusResult`
+- `.status` → `MarketStatus` (`is_marketed` / `has_record` / `is_suspended`)
+- `.errors` → `{api_name: error_msg}` (failed APIs only)
+- `.ok` / `bool(result)` → confirmed at least one record or report
 
 ### dataclasses
 - `DrugInfo` — `item_seq`, `item_name`, `entp_name`, `sources`, `identity`, `permit`, `product`, `cost`, `.to_dict()`
@@ -269,8 +340,11 @@ Constructor options: `timeout` (default 8s), `retries` (default 2),
 - `DrugPermit` — e약은요 (efficacy, usage, precautions, side effects, storage, image)
 - `DrugProduct` — product permit detail (ingredient, ATC, storage, permit date, documents, insurance code)
 - `DrugCost` — price (`max_price` ceiling `Decimal`, reimbursement type, ingredient code)
+- `SupplyReport` — suspension report (`is_suspended`, reason, last supply date, inventory)
+- `ProductionRecord` — yearly record (`amount` `Decimal`, `is_production`/`is_import`, `amount_krw`)
+- `MarketStatus` — market summary (`is_marketed`, latest record, suspension reports)
 
-### All fields (77)
+### All fields (107)
 
 Bilingual descriptions and raw-API-key mapping are in
 [`docs/fields.md`](docs/fields.md). Field names at a glance:
@@ -295,6 +369,19 @@ Bilingual descriptions and raw-API-key mapping are in
 **🟨 DrugCost (13)** — `mds_cd` `item_name` `manufacturer` `max_price` `pay_type`
 `spc_gnl_type` `injection_path` `gnl_name_code` `unit` `spec_name` `meft_div_no`
 `substitutable` `apply_start_date`
+
+**🟥 SupplyReport (21)** — `item_seq` `item_name` `edi_code` `entp_name`
+`entp_seq` `bizrno` `report_flag` `report_seq` `report_progress` `supply_yn`
+`last_supply_date` `suspend_date` `suspend_flag` `inventory_date` `inventory_qty`
+`suspend_reason` `shortage_risk` `supply_plan` `report_date` `processed_date`
+`address` (+ `is_suspended` property)
+
+**🟪 ProductionRecord (8)** — `item_seq` `item_name` `entp_name` `entp_seq`
+`bizrno` `year` `part` `amount` (+ `is_production` `is_import` `amount_krw` properties)
+
+**MarketStatus (9)** — `item_seq` `item_name` `has_record` `latest_year`
+`latest_amount` `part` `records` `is_suspended` `suspend_reports`
+(+ `is_marketed` property)
 
 ---
 

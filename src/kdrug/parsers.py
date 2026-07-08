@@ -11,7 +11,10 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
-from .models import DrugCost, DrugPermit, DrugProduct, PillIdentity
+from .models import (
+    DrugCost, DrugPermit, DrugProduct, PillIdentity,
+    ProductionRecord, SupplyReport,
+)
 
 
 # ── 값 추출 유틸 ──────────────────────────────────────────────────────
@@ -168,4 +171,55 @@ def parse_cost(row: dict[str, Any]) -> DrugCost:
     )
 
 
-__all__ = ["parse_grn", "parse_permit", "parse_product", "parse_cost"]
+def parse_supply(row: dict[str, Any]) -> SupplyReport:
+    """생산수입공급중단(getMdcinPrdctnIncmeSuplyList) 응답 1건 → SupplyReport.
+
+    실제 라이브 응답(UPPER_SNAKE) 필드명 기준.
+    """
+    return SupplyReport(
+        item_seq=_text(row, "ITEM_SEQ", "itemSeq"),
+        item_name=_text(row, "ITEM_NAME", "itemName"),
+        edi_code=_text(row, "EDI_CODE", "ediCode"),
+        entp_name=_text(row, "ENTP_NAME", "entpName"),
+        entp_seq=_text(row, "ENTP_SEQ", "entpSeq"),
+        bizrno=_text(row, "BIZRNO", "bizrno"),
+        report_flag=_text(row, "SUSPEND_REPORT_FLAG", "suspendReportFlag"),
+        report_seq=_text(row, "SUSPEND_REPORT_SEQ", "suspendReportSeq"),
+        report_progress=_text(row, "REPORT_PGS_CODE", "reportPgsCode"),
+        supply_yn=_text(row, "SUPPLY_YN", "supplyYn"),
+        last_supply_date=_text(row, "LAST_SUPPLY_DATE", "lastSupplyDate"),
+        suspend_date=_text(row, "SUSPEND_DATE", "suspendDate"),
+        suspend_flag=_text(row, "SUSPEND_FLAG", "suspendFlag"),
+        inventory_date=_text(row, "INV_DATE", "invDate"),
+        inventory_qty=_text(row, "INV_QTY", "invQty"),
+        suspend_reason=_text(row, "SUSPEND_REASON", "suspendReason"),
+        shortage_risk=_text(row, "SUPPLY_LACK_PACI", "supplyLackPaci"),
+        supply_plan=_text(row, "SUPPLY_PLAN", "supplyPlan"),
+        report_date=_text(row, "REPORT_DATE", "reportDate"),
+        processed_date=_text(row, "EXAM_RESULT_TIME", "examResultTime"),
+        address=_text(row, "REPORT_ADDR", "reportAddr"),
+    )
+
+
+def parse_production(row: dict[str, Any]) -> ProductionRecord:
+    """생산·수입실적(getMdcinPrdctnImportrstList02) 응답 1건 → ProductionRecord.
+
+    실제 라이브 응답(UPPER_SNAKE) 필드명 기준. 금액(AMT)은 생산이면 백만원,
+    수입이면 달러 단위 — 단위 해석은 ProductionRecord 속성이 담당한다.
+    """
+    return ProductionRecord(
+        item_seq=_text(row, "ITEM_SEQ", "itemSeq"),
+        item_name=_text(row, "ITEM_NAME", "itemName"),
+        entp_name=_text(row, "ENTP_NAME", "entpName"),
+        entp_seq=_text(row, "ENTP_SEQ", "entpSeq"),
+        bizrno=_text(row, "BIZRNO", "bizrno"),
+        year=_text(row, "DATE_YEAR", "dateYear"),
+        part=_text(row, "RESULT_PART", "resultPart"),
+        amount=_decimal(row, "AMT", "amt"),
+    )
+
+
+__all__ = [
+    "parse_grn", "parse_permit", "parse_product", "parse_cost",
+    "parse_supply", "parse_production",
+]

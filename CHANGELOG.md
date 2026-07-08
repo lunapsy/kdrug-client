@@ -2,6 +2,37 @@
 
 이 프로젝트는 [Semantic Versioning](https://semver.org/lang/ko/)을 따릅니다.
 
+## [0.3.0] - 2026-07-08
+
+### Added — 공급중단·생산수입실적 2종 소스 + 유통 상태 판별
+
+식약처 생산수입공급중단정보(`MdcinPrdctnIncmeSuplyService2`)와
+생산·수입실적현황(`MdcinPrdctnImportAcmsltService02`)을 5·6번째 소스로 추가.
+**허가만 받아놓고 실제 생산·수입하지 않는 품목**을 걸러낼 수 있게 됐다 —
+주문/발주 시스템 연동 시 필요한 바로 그 판별.
+
+- `SupplyReport`(21 필드) / `ProductionRecord`(8 필드) dataclass +
+  `parse_supply` / `parse_production` + `fetch_supply(item_name=/entp_name=)` /
+  `fetch_production(item_name=/entp_name=/year=/part=)`.
+- **`get_market_status(item_seq=/item_name=)`** — 두 API를 결합해
+  `MarketStatus.is_marketed` (실적 있음 + 중단 보고 없음) 하나로 답한다.
+  `MarketStatusResult` 는 `DrugInfoResult` 와 같은 `.errors` 부분 실패 패턴.
+- 두 API 모두 **item_seq 검색 미지원**(파라미터가 조용히 무시됨 — 라이브 확인)
+  → 품목명 검색 후 응답 `ITEM_SEQ` 클라이언트 매칭. item_seq 만 주면 제품허가
+  상세에서 품목명을 먼저 해석한다(허가취하 품목은 `item_name` 직접 전달 필요).
+- 실적 API 응답의 `[{"item": {...}}]` 중첩 구조를 `_extract_items` 가 흡수.
+- 금액 단위 처리: 생산=백만원, 수입=달러(USD). `ProductionRecord.amount_krw`
+  는 생산만 원화 환산(수입은 None).
+- CLI `--market` 옵션 — 유통 상태를 함께 출력.
+- `KDRUG_SUPPLY_ENDPOINT` / `KDRUG_PRODUCTION_ENDPOINT` 환경변수 오버라이드.
+- 실데이터 기반 픽스처 + 유닛 테스트 21건 추가 (레나젤 공급중단, 연도 합산,
+  동명 품목 ITEM_SEQ 필터, 허가취하 해석 실패 안내 등).
+
+### Changed
+- 문서·docstring 예시 품목을 199104100(한국얀센 타이레놀 — 허가취하로 전 API
+  에서 사라짐)에서 202106092(현행 타이레놀정500밀리그람)로 교체.
+- README(한/영)·`docs/fields.md` 에 신규 2종 API·107개 필드 반영.
+
 ## [0.2.1] - 2026-06-12
 
 ### Docs

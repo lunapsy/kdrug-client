@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/kdrug-client.svg)](https://pypi.org/project/kdrug-client/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-공공데이터포털(data.go.kr)의 **의약품 4종 OpenAPI**(식약처 3종 + 심평원 약가)를
+공공데이터포털(data.go.kr)의 **의약품 6종 OpenAPI**(식약처 5종 + 심평원 약가)를
 파이썬에서 **한 줄로** 조회하게 해주는 라이브러리입니다.
 
 ```python
@@ -21,7 +21,7 @@ print(info.permit.efficacy)           # 이 약은 발열 및 통증에...
 print(info.cost.max_price)            # 상한가 (급여 의약품인 경우)
 ```
 
-원래는 흩어진 4개의 정부 API를 각각 호출하고, 서로 다른 응답 형식을 일일이
+원래는 흩어진 6개의 정부 API를 각각 호출하고, 서로 다른 응답 형식을 일일이
 맞춰야 했습니다. 이 라이브러리가 그걸 대신합니다.
 
 | 무엇을 | 어디서 (API) | 어떤 정보 |
@@ -30,10 +30,14 @@ print(info.cost.max_price)            # 상한가 (급여 의약품인 경우)
 | 🟩 **복약정보** | e약은요 | 효능·사용법·주의·부작용·보관법 (환자용 쉬운 설명) |
 | 🟧 **허가정보** | 제품허가 상세 | 주성분·ATC·저장·유효기간·효능/용법/주의 문서·보험코드 |
 | 🟨 **약가** | 심평원 약가 | 건강보험 상한가·급여구분·전문/일반 |
+| 🟥 **공급중단** | 생산수입공급중단 | 중단 보고·최종공급일·중단사유·자사재고량 |
+| 🟪 **유통실적** | 생산·수입실적 | 연도별 생산/수입 금액 — 허가만 있는 유령 품목 판별 |
 
 **특징**
 - 🪶 **의존성 0** — 표준 라이브러리(`urllib`)만 씁니다. `pip install` 하나면 끝.
-- 🔗 **자동 조인** — 품목기준코드 하나로 4개 API를 호출해 **하나의 객체**로 합쳐줍니다.
+- 🔗 **자동 조인** — 품목기준코드 하나로 여러 API를 호출해 **하나의 객체**로 합쳐줍니다.
+- 📦 **유통 상태 판별** — `get_market_status()` 하나로 "이 약이 실제로 시장에
+  공급되고 있는가?"를 답합니다. 주문/발주 시스템 연동에 바로 쓸 수 있습니다.
 - 🛟 **부분 실패 허용** — 한 API가 막혀도(403/오류) 나머지 데이터는 그대로 받습니다.
 - 🧩 **타입 친화적** — `dataclass` 반환이라 IDE 자동완성이 됩니다.
 - 💻 **CLI 포함** — 터미널에서 `kdrug --item-name 타이레놀` 한 줄로 조회.
@@ -46,10 +50,11 @@ print(info.cost.max_price)            # 상한가 (급여 의약품인 경우)
 3. [인증키 발급](#인증키-발급)
 4. [사용법](#사용법)
 5. [결과 다루기](#결과-다루기)
-6. [CLI](#cli)
-7. [API 레퍼런스](#api-레퍼런스)
-8. [예외 처리](#예외-처리)
-9. [자주 묻는 질문](#자주-묻는-질문)
+6. [유통 상태 확인](#유통-상태-확인)
+7. [CLI](#cli)
+8. [API 레퍼런스](#api-레퍼런스)
+9. [예외 처리](#예외-처리)
+10. [자주 묻는 질문](#자주-묻는-질문)
 
 ---
 
@@ -103,19 +108,22 @@ kdrug --item-name 타이레놀정500밀리그람
 
 ## 인증키 발급
 
-> 키는 **무료**이고, 발급에 5~10분이면 됩니다. 한 계정의 키 하나로 4개 API를
+> 키는 **무료**이고, 발급에 5~10분이면 됩니다. 한 계정의 키 하나로 6개 API를
 > 모두 쓸 수 있지만, **API마다 "활용신청"을 따로 해야** 합니다.
 
 1. [공공데이터포털](https://www.data.go.kr) 회원가입 / 로그인
-2. 아래 4개 API 페이지에서 각각 **활용신청** (보통 즉시~수시간 내 자동 승인)
+2. 아래 6개 API 페이지에서 각각 **활용신청** (보통 즉시~수시간 내 자동 승인)
    - [의약품 낱알식별 정보](https://www.data.go.kr/data/15057639/openapi.do)
    - [의약품개요정보(e약은요)](https://www.data.go.kr/data/15075057/openapi.do)
    - [의약품 제품 허가정보](https://www.data.go.kr/data/15095677/openapi.do)
    - [건강보험심사평가원 약가기준정보](https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do) ← 약가(별도 기관)
+   - [의약품 생산수입공급중단정보](https://www.data.go.kr/data/15057899/openapi.do) ← 유통 상태용
+   - [의약품 생산·수입실적현황](https://www.data.go.kr/data/15056880/openapi.do) ← 유통 상태용
 3. **마이페이지 → 오픈API → 인증키 발급** 에서 **`일반 인증키 (Decoding)`** 값을 복사
 
-> 💡 4개 다 신청하지 않아도 됩니다. 예를 들어 약가가 필요 없으면 앞의 3개만
-> 신청하세요. 신청 안 한 API는 자동으로 건너뜁니다(부분 실패 허용).
+> 💡 6개 다 신청하지 않아도 됩니다. 예를 들어 약가가 필요 없으면 신청을 빼세요.
+> 신청 안 한 API는 자동으로 건너뜁니다(부분 실패 허용). 마지막 2개는
+> `get_market_status()`(유통 상태)를 쓸 때만 필요합니다.
 
 ### 키 등록 방법
 
@@ -264,6 +272,63 @@ info.to_dict()
 
 ---
 
+## 유통 상태 확인
+
+허가는 살아있는데 **실제로는 생산도 수입도 하지 않는 품목**이 있습니다.
+의약품 데이터를 주문/발주 시스템과 연동하면 이런 품목이 주문 실패의 원인이 됩니다.
+`get_market_status()` 는 생산·수입실적과 공급중단 보고 2종 API를 결합해
+"이 약이 실제로 시장에 공급되고 있는가?"를 한 번에 답합니다.
+
+```python
+result = client.get_market_status(item_seq="202106092")
+s = result.status
+
+s.is_marketed      # True = 생산/수입 실적 있음 + 공급중단 보고 없음
+s.has_record       # 생산/수입 실적 존재 여부 (식약처 연간 집계)
+s.latest_year      # 가장 최근 실적 연도 — "2024"
+s.latest_amount    # 그 해 실적 합계 (단위는 s.part 참조 — 아래 주의)
+s.part             # "생산" 또는 "수입"
+s.is_suspended     # 공급중단 보고 존재 여부
+s.suspend_reports  # SupplyReport 리스트 — 중단사유·최종공급일·자사재고량
+s.records          # ProductionRecord 리스트 — 연도별 원본 실적
+```
+
+주문 연동의 전형적인 흐름:
+
+```python
+for seq in my_item_seqs:
+    result = client.get_market_status(item_seq=seq)
+    if not result.status.is_marketed:
+        mark_unorderable(seq)    # 허가만 있음 / 공급중단 / 허가취하
+```
+
+두 API 를 따로 쓸 수도 있습니다:
+
+```python
+# 공급중단 보고 검색 (업체명/품목명)
+reports = client.fetch_supply(entp_name="한미약품")
+for r in reports:
+    print(r.suspend_date, r.is_suspended, r.suspend_reason)
+
+# 생산·수입실적 검색 (연도/구분/업체명/품목명)
+records = client.fetch_production(year="2024", part="수입", rows=20)
+for r in records:
+    print(r.year, r.part, r.amount)
+```
+
+> **⚠️ 금액 단위가 구분마다 다릅니다** — 생산은 **백만원**, 수입은 **달러(USD)**.
+> 생산 실적의 원화 환산은 `record.amount_krw` 를 쓰세요 (수입은 환율이 필요해 `None`).
+
+> **⚠️ 두 API 모두 item_seq 검색이 안 됩니다** (파라미터를 보내도 무시 — 라이브 확인).
+> 그래서 품목명으로 검색한 뒤 응답의 `ITEM_SEQ` 로 클라이언트가 매칭합니다.
+> `item_seq` 만 넘기면 제품허가 상세에서 품목명을 먼저 해석합니다(API 1회 추가).
+
+> **⚠️ 허가취하 품목은 `item_name` 을 함께 넘기세요** — 허가가 취하되면 제품허가
+> API에서 사라져 품목명 해석이 불가능합니다. 공급중단된 품목일수록 흔한 경우입니다:
+> `client.get_market_status(item_seq=seq, item_name="레나젤정800(세벨라머염산염)")`
+
+---
+
 ## CLI
 
 설치하면 `kdrug` 명령을 바로 쓸 수 있습니다.
@@ -277,6 +342,9 @@ kdrug --item-name 타이레놀
 
 # JSON 출력 (다른 도구로 넘기기 좋음)
 kdrug --item-seq 200410085 --json
+
+# 유통 상태까지 함께 조회
+kdrug --item-seq 202106092 --market
 
 # .env 템플릿 만들기
 kdrug --init
@@ -312,19 +380,28 @@ kdrug --init
 | `KdrugClient(api_key=...)` | — | 키를 직접 지정해 생성 |
 | `KdrugClient.from_env()` | `KdrugClient` | 환경변수/`.env` 로 생성 |
 | `get_drug_info(item_seq=, item_name=, with_cost=True, strict=False)` | `DrugInfoResult` | **4종 통합 조회 (권장)** |
+| `get_market_status(item_seq=, item_name=, rows=50, strict=False)` | `MarketStatusResult` | **유통 상태 (실적+공급중단 결합)** |
 | `fetch_grn(item_seq=, item_name=, rows=10)` | `list[PillIdentity]` | 낱알식별만 |
 | `fetch_permit(...)` | `list[DrugPermit]` | e약은요만 |
 | `fetch_product(...)` | `list[DrugProduct]` | 제품허가 상세만 |
 | `fetch_cost(mds_cd=, item_name=, manufacturer=)` | `list[DrugCost]` | 약가만 (심평원) |
+| `fetch_supply(item_name=, entp_name=)` | `list[SupplyReport]` | 공급중단 보고만 |
+| `fetch_production(item_name=, entp_name=, year=, part=)` | `list[ProductionRecord]` | 생산·수입실적만 |
 | `fetch_grn_raw(...)` 등 | `list[dict]` | 가공 전 원본 응답 |
 
 생성자 옵션: `timeout`(기본 8초), `retries`(기본 2회),
-`grn_endpoint`/`permit_endpoint`/`product_endpoint`/`cost_endpoint` 오버라이드, `user_agent`.
+`grn_endpoint`/`permit_endpoint`/`product_endpoint`/`cost_endpoint`/
+`supply_endpoint`/`production_endpoint` 오버라이드, `user_agent`.
 
 ### `DrugInfoResult`
 - `.info` → `DrugInfo` (병합 결과)
 - `.errors` → `{api_name: error_msg}` (실패한 API만)
 - `.ok` / `bool(result)` → 하나 이상 데이터를 받았는가
+
+### `MarketStatusResult`
+- `.status` → `MarketStatus` (유통 상태 — `is_marketed` / `has_record` / `is_suspended`)
+- `.errors` → `{api_name: error_msg}` (실패한 API만)
+- `.ok` / `bool(result)` → 실적 또는 중단 보고를 하나라도 확인했는가
 
 ### dataclass
 - `DrugInfo` — `item_seq`, `item_name`, `entp_name`, `sources`, `identity`, `permit`, `product`, `cost`, `.to_dict()`
@@ -332,8 +409,11 @@ kdrug --init
 - `DrugPermit` — e약은요 (효능·사용법·주의·부작용·보관·낱알이미지)
 - `DrugProduct` — 제품허가 상세 (성분·ATC·저장·허가일·효능/용법/주의 문서·보험코드)
 - `DrugCost` — 약가 (`max_price` 상한가 `Decimal`·급여구분·주성분코드)
+- `SupplyReport` — 공급중단 보고 (`is_suspended`·중단사유·최종공급일·자사재고량)
+- `ProductionRecord` — 생산·수입실적 (`amount` `Decimal`·`is_production`/`is_import`·`amount_krw`)
+- `MarketStatus` — 유통 상태 요약 (`is_marketed`·최근 실적·중단 보고)
 
-### 전체 필드 목록 (77개)
+### 전체 필드 목록 (107개)
 
 한·영 설명과 원본 API 키 매핑은 [`docs/fields.md`](docs/fields.md) 에 표로 정리돼
 있습니다. 필드명만 한눈에:
@@ -358,6 +438,19 @@ kdrug --init
 **🟨 DrugCost (13)** — `mds_cd` `item_name` `manufacturer` `max_price` `pay_type`
 `spc_gnl_type` `injection_path` `gnl_name_code` `unit` `spec_name` `meft_div_no`
 `substitutable` `apply_start_date`
+
+**🟥 SupplyReport (21)** — `item_seq` `item_name` `edi_code` `entp_name`
+`entp_seq` `bizrno` `report_flag` `report_seq` `report_progress` `supply_yn`
+`last_supply_date` `suspend_date` `suspend_flag` `inventory_date` `inventory_qty`
+`suspend_reason` `shortage_risk` `supply_plan` `report_date` `processed_date`
+`address` (+ `is_suspended` 속성)
+
+**🟪 ProductionRecord (8)** — `item_seq` `item_name` `entp_name` `entp_seq`
+`bizrno` `year` `part` `amount` (+ `is_production` `is_import` `amount_krw` 속성)
+
+**MarketStatus (9)** — `item_seq` `item_name` `has_record` `latest_year`
+`latest_amount` `part` `records` `is_suspended` `suspend_reports`
+(+ `is_marketed` 속성)
 
 ---
 

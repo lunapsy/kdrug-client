@@ -3,11 +3,14 @@
 공공API 원본 응답(JSON dict)을 사람이 읽기 쉬운 snake_case 필드로 정규화한다.
 세 API의 공통 조인 키는 ``item_seq`` (품목기준코드).
 
-- PillIdentity : 낱알식별 — 외형/치수/색상/식별표시
-- DrugPermit   : 허가정보 — 성분/저장방법/허가일/효능·용법 문서
-- DrugProduct  : 제품허가 상세 — 성분/원료/저장/허가일/ATC/효능·용법·주의 문서
-- DrugCost     : 약가기준(심평원) — 상한가/급여구분/주성분코드
-- DrugInfo     : 위 넷을 병합한 통합 뷰 (식약처 3종=item_seq, 약가=보험코드 조인)
+- PillIdentity     : 낱알식별 — 외형/치수/색상/식별표시
+- DrugPermit       : 허가정보 — 성분/저장방법/허가일/효능·용법 문서
+- DrugProduct      : 제품허가 상세 — 성분/원료/저장/허가일/ATC/효능·용법·주의 문서
+- DrugCost         : 약가기준(심평원) — 상한가/급여구분/주성분코드
+- SupplyReport     : 생산수입공급중단 보고 — 최종공급일/중단사유/자사재고량
+- ProductionRecord : 생산·수입실적 — 연도별 생산/수입 금액
+- DrugInfo         : 위 4종(식별·e약은요·허가·약가)을 병합한 통합 뷰
+- MarketStatus     : 실적+공급중단을 결합한 유통 상태 요약 (is_marketed)
 """
 
 from __future__ import annotations
@@ -171,6 +174,140 @@ class DrugCost:
         return out
 
 
+
+@dataclass
+class SupplyReport:
+    """생산수입공급중단 보고 (MdcinPrdctnIncmeSuplyService2).
+
+    업체가 식약처에 제출한 생산/수입/공급 중단 보고 1건. 최종공급일자·중단사유·
+    자사재고량·공급부족가능성 등 수급 리스크 판단 정보를 담는다. 일 1회 갱신.
+
+    ⚠️ 이 API는 item_seq 요청 파라미터가 없다 — 업체명(entpName)/품목명(itemName)
+    으로만 검색되며, 특정 품목 매칭은 응답의 ITEM_SEQ 로 클라이언트에서 한다.
+    """
+
+    item_seq: str = ""                   # ITEM_SEQ 품목기준코드 (조인키)
+    item_name: str = ""                  # ITEM_NAME 품목명
+    edi_code: str = ""                   # EDI_CODE 표준코드
+    entp_name: str = ""                  # ENTP_NAME 업체명
+    entp_seq: str = ""                   # ENTP_SEQ 업 일련번호
+    bizrno: str = ""                     # BIZRNO 사업자등록번호
+    report_flag: str = ""                # SUSPEND_REPORT_FLAG 보고구분 (생산/수입/공급)
+    report_seq: str = ""                 # SUSPEND_REPORT_SEQ 보고번호
+    report_progress: str = ""            # REPORT_PGS_CODE 진행단계 (신청중/처리완료/취하 등)
+    supply_yn: str = ""                  # SUPPLY_YN 보고구분_공급 (Y/N)
+    last_supply_date: str = ""           # LAST_SUPPLY_DATE 최종공급일자 (YYYYMMDD)
+    suspend_date: str = ""               # SUSPEND_DATE 공급중단일자 (YYYYMMDD)
+    suspend_flag: str = ""               # SUSPEND_FLAG 중단구분 (1:공급 / 2:공급중단)
+    inventory_date: str = ""             # INV_DATE 재고기준일자
+    inventory_qty: str = ""              # INV_QTY 자사재고량
+    suspend_reason: str = ""             # SUSPEND_REASON 중단사유
+    shortage_risk: str = ""              # SUPPLY_LACK_PACI 공급부족가능성
+    supply_plan: str = ""                # SUPPLY_PLAN 공급원활 추진계획
+    report_date: str = ""                # REPORT_DATE 보고일자
+    processed_date: str = ""             # EXAM_RESULT_TIME 처리일자
+    address: str = ""                    # REPORT_ADDR 업체소재지
+
+    @property
+    def is_suspended(self) -> bool:
+        """공급중단 보고 여부 (SUSPEND_FLAG == "2")."""
+        return self.suspend_flag.strip() == "2"
+
+    def to_dict(self) -> dict[str, Any]:
+        out = _clean(asdict(self))
+        out["is_suspended"] = self.is_suspended
+        return out
+
+
+@dataclass
+class ProductionRecord:
+    """생산·수입실적 (MdcinPrdctnImportAcmsltService02).
+
+    품목별 연간 생산 또는 수입 실적 1건. **허가만 받아놓고 실제로 생산/수입하지
+    않는 품목**을 걸러낼 때 쓴다 — 실적 레코드가 없으면 그 해 시장 공급이 없었다는
+    신호다. 연 1회 갱신.
+
+    ⚠️ 금액 단위가 구분별로 다르다: 생산 = 백만원, 수입 = 달러(USD).
+    ⚠️ 같은 품목이 한 연도에 복수 레코드(포장단위별 등)로 나올 수 있다.
+    ⚠️ 이 API도 item_seq 요청 파라미터가 무시된다(라이브 확인) — 품목명으로 검색
+    후 응답의 ITEM_SEQ 로 매칭해야 한다.
+    """
+
+    item_seq: str = ""                   # ITEM_SEQ 품목기준코드 (조인키)
+    item_name: str = ""                  # ITEM_NAME 품목명
+    entp_name: str = ""                  # ENTP_NAME 업체명
+    entp_seq: str = ""                   # ENTP_SEQ 업 일련번호
+    bizrno: str = ""                     # BIZRNO 사업자등록번호
+    year: str = ""                       # DATE_YEAR 집계년도
+    part: str = ""                       # RESULT_PART 생산·수입 구분 ("생산"/"수입")
+    amount: Optional[Decimal] = None     # AMT 실적금액 (생산:백만원 / 수입:달러)
+
+    @property
+    def is_production(self) -> bool:
+        """국내 생산 실적 여부 (금액 단위: 백만원)."""
+        return self.part.strip() == "생산"
+
+    @property
+    def is_import(self) -> bool:
+        """수입 실적 여부 (금액 단위: 달러)."""
+        return self.part.strip() == "수입"
+
+    @property
+    def amount_krw(self) -> Optional[Decimal]:
+        """생산 실적 금액의 원 단위 환산. 수입 실적(달러)은 환율이 필요하므로 None."""
+        if self.amount is None or not self.is_production:
+            return None
+        return self.amount * 1_000_000
+
+    def to_dict(self) -> dict[str, Any]:
+        out = _clean(asdict(self))
+        if isinstance(out.get("amount"), Decimal):
+            out["amount"] = str(out["amount"])
+        return out
+
+
+@dataclass
+class MarketStatus:
+    """유통 상태 요약 — 생산·수입실적 + 공급중단 보고 결합.
+
+    "허가는 살아있는데 실제로 시장에 공급되고 있는가?"에 답한다.
+    주문/발주 시스템 연동 시 죽은 품목(허가만 있고 미생산/미수입)을 걸러내는
+    용도로 설계됐다. ``KdrugClient.get_market_status()`` 가 만든다.
+    """
+
+    item_seq: str = ""
+    item_name: str = ""
+    # 실적 (생산·수입실적 API)
+    has_record: bool = False             # 생산/수입 실적 존재 여부
+    latest_year: str = ""                # 가장 최근 실적 연도
+    latest_amount: Optional[Decimal] = None  # 최근 연도 실적 합계 (단위는 part 참조)
+    part: str = ""                       # 최근 실적 구분 ("생산"/"수입")
+    records: list = field(default_factory=list)          # ProductionRecord 리스트
+    # 공급중단 (공급중단 API)
+    is_suspended: bool = False           # 공급중단 보고 존재 여부
+    suspend_reports: list = field(default_factory=list)  # SupplyReport 리스트
+
+    @property
+    def is_marketed(self) -> bool:
+        """실제 유통 중으로 추정 (실적 있음 + 공급중단 보고 없음)."""
+        return self.has_record and not self.is_suspended
+
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {
+            "item_seq": self.item_seq,
+            "item_name": self.item_name,
+            "has_record": self.has_record,
+            "latest_year": self.latest_year,
+            "latest_amount": str(self.latest_amount) if self.latest_amount is not None else None,
+            "part": self.part,
+            "is_suspended": self.is_suspended,
+            "is_marketed": self.is_marketed,
+            "records": [r.to_dict() for r in self.records],
+            "suspend_reports": [r.to_dict() for r in self.suspend_reports],
+        }
+        return out
+
+
 @dataclass
 class DrugInfo:
     """4종 API 결과를 병합한 통합 의약품 정보.
@@ -213,4 +350,7 @@ class DrugInfo:
         return not self.sources
 
 
-__all__ = ["PillIdentity", "DrugPermit", "DrugProduct", "DrugCost", "DrugInfo"]
+__all__ = [
+    "PillIdentity", "DrugPermit", "DrugProduct", "DrugCost",
+    "SupplyReport", "ProductionRecord", "MarketStatus", "DrugInfo",
+]
